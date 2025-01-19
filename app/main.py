@@ -185,6 +185,16 @@ async def chat_completion(
         use_tools = bool(tools)
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
+                request_data = {
+                    "messages": messages,
+                    "stream": True,
+                    "max_tokens": 1000
+                }
+                
+                if use_tools:
+                    request_data["tools"] = [tool.dict() for tool in tools]
+                    request_data["tool_choice"] = "auto"
+                
                 async with client.stream(
                     "POST",
                     "https://api.githubcopilot.com/chat/completions",
@@ -193,11 +203,7 @@ async def chat_completion(
                         "Content-Type": "application/json",
                         "Accept": "application/json"
                     },
-                    json={
-                        "messages": messages,
-                        "stream": True,
-                        "max_tokens": 1000  # Limit response size
-                    }
+                    json=request_data
                 ) as response:
                     if response.status_code != 200:
                         error_body = await response.aread()
