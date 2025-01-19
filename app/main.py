@@ -41,9 +41,14 @@ app = FastAPI()
 async def cached_ingest(repo_url: str, include_patterns: list[str] | None = None):
     # Check cache first with versioned key
     cache_key = get_versioned_key(repo_url)
-    if cache_key in cache:
+    cached_data = cache.get(cache_key)
+    if cached_data is not None:
         print(f"Cache hit for {repo_url}")
-        return cache[cache_key]
+        if not isinstance(cached_data, tuple) or len(cached_data) != 3:
+            # Invalid cache entry - delete it
+            cache.delete(cache_key)
+            raise ValueError("Invalid cache format - clearing entry")
+        return cached_data
     
     print(f"Cache miss for {repo_url}, computing...")
     # Run the sync ingest function in a thread pool
@@ -57,6 +62,9 @@ async def cached_ingest(repo_url: str, include_patterns: list[str] | None = None
         result = await asyncio.get_event_loop().run_in_executor(pool, sync_ingest)
     
     # Store in cache with 1-hour expiration using versioned key
+    if not isinstance(result, tuple) or len(result) != 3:
+        raise ValueError("Invalid ingest result format")
+    
     cache.set(cache_key, result, expire=3600)
     return result
 
