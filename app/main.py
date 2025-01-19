@@ -102,7 +102,7 @@ async def chat_completion(
                 # Only include code files by default
                 result = await cached_ingest(
                     url,
-                    include_patterns=["*.py", "*.kt", "*.kts", "*.java", "*.gradle"]
+                    include_patterns=["*.py", "*.kt", "*.kts", "*.java", "*.gradle", "*.md", "*.json", "*.yaml", "*.yml", "*.ts"]
                 )
                 summary = result[0]
                 tree = result[1]
