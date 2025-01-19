@@ -309,8 +309,10 @@ async def chat_completion(
                         choice = data["choices"][0]
                         finish_reason = choice.get("finish_reason")
                         
-                        if finish_reason == "tool_calls":
-                            tool_calls = choice.get("message", {}).get("tool_calls", [])
+                        message = choice.get("message", {})
+                        tool_calls = message.get("tool_calls", [])
+                        
+                        if tool_calls:
                             print(f"\n=== Tool Calls Found ===")
                             print(f"Number of tool calls: {len(tool_calls)}")
                             
@@ -331,6 +333,13 @@ async def chat_completion(
                                 use_tools = False
                                 print("Final iteration - disabling tools")
                             
+                            return messages
+                        elif finish_reason == "stop":
+                            # No tool calls, just return the assistant message
+                            messages.append({
+                                "role": "assistant",
+                                "content": message.get("content", "")
+                            })
                             return messages
                         
                 except json.JSONDecodeError as e:
