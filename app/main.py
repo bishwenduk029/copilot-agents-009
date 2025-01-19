@@ -77,8 +77,7 @@ When answering questions about the code:
 Current repository context:
 Summary: {summary}
 File Tree: {tree}
-
-Start every response with the user's name, which is @{username}"""
+"""
             })
         except Exception as e:
             print(f"Error ingesting repository: {str(e)}")
@@ -93,8 +92,7 @@ When answering questions about code:
 2. Explain technical concepts clearly
 3. Suggest best practices when appropriate
 4. If you're unsure, say so rather than guessing
-
-Start every response with the user's name, which is @{username}"""
+"""
             })
     else:
         messages = payload.get("messages", [])
@@ -108,8 +106,7 @@ When answering questions about code:
 2. Explain technical concepts clearly
 3. Suggest best practices when appropriate
 4. If you're unsure, say so rather than guessing
-
-Start every response with the user's name, which is @{username}"""
+"""
         })
 
     # Stream response from Copilot API
