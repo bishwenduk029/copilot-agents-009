@@ -167,6 +167,9 @@ async def chat_completion(
     # Define available tools with thread context
     tools = []
     if thread_id:
+        print(f"\n=== Auth Token ===")
+        print(f"Token present: {'YES' if x_github_token else 'NO'}")
+        
         tools = [{
             "type": "function",
             "function": {
@@ -189,6 +192,15 @@ async def chat_completion(
             }
         }]
 
+    # Print tools configuration
+    print(f"\n=== Tools Configuration ===")
+    print(f"Tools enabled: {'YES' if tools else 'NO'}")
+    if tools:
+        print("Available tools:")
+        for tool in tools:
+            print(f"- {tool['function']['name']}")
+            print(f"  Description: {tool['function']['description']}")
+    
     # In production mode, stream response from Copilot API
     async def process_tool_calls(tool_calls: List[Dict]) -> List[Dict]:
         """Process tool calls and return assistant messages with results"""
