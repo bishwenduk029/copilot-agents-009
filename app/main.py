@@ -295,7 +295,15 @@ async def chat_completion(
                 while current_iteration < max_iterations:
                     # Handle tool calls if needed
                     if use_tools:
+                        # Store previous iteration count to detect if we made progress
+                        prev_iteration = current_iteration
                         local_messages = await handle_tool_calls(client, local_messages)
+                        
+                        # If we didn't process any tool calls, break to avoid infinite loop
+                        if current_iteration == prev_iteration:
+                            print("No tool calls processed - breaking loop")
+                            break
+                            
                         if not use_tools:
                             # Make final request without tools
                             async for chunk in make_api_request(client, local_messages, False):
@@ -306,40 +314,6 @@ async def chat_completion(
                         async for chunk in make_api_request(client, local_messages, False):
                             yield chunk
                         return
-                        
-                        
-                        async with client.stream(
-                            "POST", 
-                            "https://api.githubcopilot.com/chat/completions",
-                            headers={
-                                "Authorization": f"Bearer {x_github_token}",
-                                "Content-Type": "application/json",
-                                "Accept": "application/json"
-                            },
-                            json={
-                                "messages": local_messages,
-                                "stream": True,
-                                "tools": None,
-                                "tool_choice": None
-                            }
-                        ) as response:
-                            if response.status_code != 200:
-                                error_body = await response.aread()
-                                print("\n=== API Error Details ===")
-                                print(f"Status Code: {response.status_code}")
-                                print("Response Headers:", dict(response.headers))
-                                print("Response Body:", error_body)
-                                print("=======================\n")
-                                yield b'{"error": "API request failed"}'
-                                return
-                            
-                            async for chunk in response.aiter_bytes():
-                                chunk_str = chunk.decode('utf-8')
-                                if not any(tc in chunk_str for tc in ['"tool_calls"', '"delta"']):
-                                    yield chunk
-                                else:
-                                    pass
-                            return
         except Exception as e:
             print(f"Streaming error: {str(e)}")
             yield b'{"error": "Streaming failed"}'
