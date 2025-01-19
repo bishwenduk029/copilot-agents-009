@@ -37,19 +37,11 @@ async def cached_ingest(repo_url: str):
         return cache[repo_url]
     
     print(f"Cache miss for {repo_url}, computing...")
-    try:
-        # Run the sync ingest function in a thread pool
-        import asyncio
-        from functools import partial
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(None, partial(ingest, repo_url))
-        
-        # Store in cache with 1-hour expiration
-        cache.set(repo_url, result, expire=3600)
-        return result
-    except Exception as e:
-        print(f"Error ingesting repository: {str(e)}")
-        raise
+    result = ingest(repo_url)
+    
+    # Store in cache with 1-hour expiration
+    cache.set(repo_url, result, expire=3600)
+    return result
 
 @app.get("/")
 async def root():
@@ -67,7 +59,6 @@ async def chat_completion(
 
     # Get request payload
     payload = await request.json()
-    print("Payload:", payload)
     
     messages = payload.get("messages", [])
     system_message = BASE_SYSTEM_PROMPT
