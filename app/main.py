@@ -220,6 +220,10 @@ async def chat_completion(
         
         async def make_api_request(client, messages, use_tools):
             """Make API request and handle response"""
+            print(f"\n=== API Request ===")
+            print(f"Using tools: {'YES' if use_tools else 'NO'}")
+            print(f"Tool choice: {'required' if use_tools else 'none'}")
+            
             request_data = {
                 "messages": messages,
                 "stream": True,
