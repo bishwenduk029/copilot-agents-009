@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.responses import StreamingResponse
 import httpx
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from gitingest import ingest
 from diskcache import Cache
@@ -280,6 +280,15 @@ class ToolCall(BaseModel):
     id: str
     type: str
     function: Dict[str, Any]
+
+class FunctionCall(BaseModel):
+    name: str
+    arguments: str
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+    tool_call_id: Optional[str] = None
 
 async def execute_repo_navigation_tool(function_call: FunctionCall) -> str:
     """Execute the repository navigation tool to search repository content"""
