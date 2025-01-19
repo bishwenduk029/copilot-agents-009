@@ -104,9 +104,6 @@ async def chat_completion(
         repo_data = thread_cache[thread_id]
         system_message += f"\n\n{REPO_CONTEXT_PROMPT.format(summary=repo_data['summary'], tree=repo_data['tree'])}"
     
-    # Add personalized greeting
-    system_message += f"\n\nStart every response with the user's name, which is @{username}"
-    
     messages.insert(0, {
         "role": "system",
         "content": system_message
