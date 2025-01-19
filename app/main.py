@@ -275,6 +275,8 @@ async def chat_completion(
             
             # Track if we got a tool call
             got_tool_call = False
+            tool_calls = []
+            current_tool_call = None
             
             # Make initial API request
             async for chunk in make_api_request(client, messages, use_tools):
@@ -282,20 +284,41 @@ async def chat_completion(
                 
                 try:
                     data = json.loads(chunk_str)
-                    if data.get("choices") and data["choices"][0].get("delta", {}).get("tool_calls"):
-                        # Process tool calls
-                        tool_calls = data["choices"][0]["delta"]["tool_calls"]
-                        tool_messages = await process_tool_calls(tool_calls)
-                        messages.extend(tool_messages)
-                        
-                        # Mark that we got a tool call
-                        got_tool_call = True
-                        break
+                    if data.get("choices"):
+                        choice = data["choices"][0]
+                        if choice.get("delta", {}).get("tool_calls"):
+                            # Process tool call chunks
+                            for tool_call in choice["delta"]["tool_calls"]:
+                                if tool_call.get("index") == 0:
+                                    if not current_tool_call:
+                                        # Start new tool call
+                                        current_tool_call = {
+                                            "id": tool_call.get("id"),
+                                            "type": tool_call.get("type"),
+                                            "function": {
+                                                "name": tool_call["function"].get("name"),
+                                                "arguments": tool_call["function"].get("arguments", "")
+                                            }
+                                        }
+                                    else:
+                                        # Append to existing tool call
+                                        current_tool_call["function"]["arguments"] += tool_call["function"].get("arguments", "")
+                                        
+                                    # If we have a complete tool call
+                                    if data.get("finish_reason") == "tool_calls":
+                                        tool_calls.append(current_tool_call)
+                                        current_tool_call = None
+                                        got_tool_call = True
+                                        
                 except json.JSONDecodeError:
                     continue
                     
-            # Only increment counter if we actually processed a tool call
-            if got_tool_call:
+            # If we got tool calls, process them
+            if got_tool_call and tool_calls:
+                tool_messages = await process_tool_calls(tool_calls)
+                messages.extend(tool_messages)
+                
+                # Update iteration state
                 current_iteration += 1
                 if current_iteration >= max_iterations - 1:
                     use_tools = False
