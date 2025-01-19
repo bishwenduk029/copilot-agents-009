@@ -79,8 +79,13 @@ def test_set_repo_command(mock_github_user, mock_ingest):
         assert BASE_SYSTEM_PROMPT in system_messages[0]["content"]
         assert "Test repository summary" in system_messages[0]["content"]
         
-        # Verify ingest was called
+        # Verify ingest was called and print mock return values
         mock_ingest.assert_called_once_with("https://github.com/cyclotruc/gitingest")
+        print("\nMock Ingest Return Values:")
+        print(f"Summary: {mock_ingest.return_value[0]}")
+        print(f"File Tree: {mock_ingest.return_value[1]}")
+        print(f"Content: {mock_ingest.return_value[2]}")
+        print("-" * 80)
 
 def test_set_repo_invalid_url(mock_github_user):
     # Mock GitHub API response
