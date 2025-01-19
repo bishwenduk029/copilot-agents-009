@@ -191,3 +191,41 @@ async def test_set_repo_live_gitingest(mock_github_user):
         except Exception as e:
             print(f"Error during test: {str(e)}")
             raise
+
+@pytest.mark.asyncio
+async def test_cached_ingest_async_handling(mock_github_user):
+    """Test async handling of cached_ingest function"""
+    from app.main import cached_ingest, cache
+    
+    # Clear cache before test
+    cache.clear()
+    
+    test_repo_url = "https://github.com/test/repo"
+    test_data = ("Test summary", "test/file/structure", "test content")
+    
+    # Mock the thread pool execution
+    with patch("asyncio.get_event_loop") as mock_loop, \
+         patch("app.main.ingest") as mock_ingest:
+        
+        # Setup mock executor
+        mock_executor = MagicMock()
+        mock_loop.return_value.run_in_executor.return_value = test_data
+        mock_ingest.return_value = test_data
+        
+        # Call cached_ingest
+        result = await cached_ingest(test_repo_url)
+        
+        # Verify results
+        assert result == test_data
+        assert test_repo_url in cache
+        
+        # Verify thread pool was used
+        mock_loop.return_value.run_in_executor.assert_called_once()
+        
+        # Verify cache was set
+        cached_result = cache.get(test_repo_url)
+        assert cached_result == test_data
+        
+        # Verify cache hit on second call
+        result2 = await cached_ingest(test_repo_url)
+        assert result2 == test_data
