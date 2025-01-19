@@ -137,60 +137,59 @@ async def test_set_repo_live_gitingest(mock_github_user):
     # Use a small, public test repository
     test_repo_url = "https://github.com/octocat/Hello-World"
     
-    # Mock GitHub API response
-    with patch("httpx.AsyncClient.get") as mock_get:
-        mock_get.return_value = MagicMock(
-            status_code=200,
-            json=lambda: mock_github_user
+    # Create test payload
+    payload = {
+        "copilot_thread_id": "test-thread-123",
+        "messages": [
+            {
+                "role": "user",
+                "content": f"/set {test_repo_url}"
+            }
+        ]
+    }
+    
+    try:
+        # Make request with test client
+        response = client.post(
+            "/",
+            json=payload,
+            headers={}  # No auth header needed in test mode
         )
         
-        # Create test payload
-        payload = {
-            "copilot_thread_id": "test-thread-123",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": f"/set {test_repo_url}"
-                }
-            ]
-        }
+        # Verify response
+        assert response.status_code == 200
+        response_data = response.json()
         
-        try:
-            # Make request with test client
-            response = client.post(
-                "/",
-                json=payload,
-                headers={}  # No auth header needed in test mode
-            )
-            
-            # Verify response
-            assert response.status_code == 200
-            response_data = response.json()
-            
-            # Verify response structure
-            assert response_data["status"] == "success"
-            assert len(response_data["messages"]) > 0
-            
-            # Verify system message was updated
-            system_messages = [msg for msg in response_data["messages"] if msg["role"] == "system"]
-            assert len(system_messages) > 0
-            
-            # Print the system message for validation
-            print("\nLive System Message:")
-            print(system_messages[0]["content"])
-            print("-" * 80)
-            
-            # Verify base prompt is present
-            assert BASE_SYSTEM_PROMPT in system_messages[0]["content"]
-            
-            # Verify we got some actual repository context
-            assert "Current repository context" in system_messages[0]["content"]
-            assert "Summary:" in system_messages[0]["content"]
-            assert "File Tree:" in system_messages[0]["content"]
-            
-        except Exception as e:
-            print(f"Error during test: {str(e)}")
-            raise
+        # Verify response structure
+        assert response_data["status"] == "success"
+        assert len(response_data["messages"]) > 0
+        
+        # Verify system message was updated
+        system_messages = [msg for msg in response_data["messages"] if msg["role"] == "system"]
+        assert len(system_messages) > 0
+        
+        # Print the system message for validation
+        print("\nLive System Message:")
+        print(system_messages[0]["content"])
+        print("-" * 80)
+        
+        # Verify base prompt is present
+        assert BASE_SYSTEM_PROMPT in system_messages[0]["content"]
+        
+        # Verify we got some actual repository context
+        assert "Current repository context" in system_messages[0]["content"]
+        assert "Summary:" in system_messages[0]["content"]
+        assert "File Tree:" in system_messages[0]["content"]
+        
+        # Print actual repository data
+        repo_data = system_messages[0]["content"].split("Current repository context:")[1]
+        print("\nActual Repository Data:")
+        print(repo_data)
+        print("-" * 80)
+        
+    except Exception as e:
+        print(f"Error during test: {str(e)}")
+        raise
 
 @pytest.mark.asyncio
 async def test_cached_ingest_async_handling(mock_github_user):
