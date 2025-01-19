@@ -324,18 +324,21 @@ async def chat_completion(
                             else:
                                 print("Skipping tool call chunk from final output")
                         
-                        # If we didn't get a tool call, continue to next iteration
-                        if not got_tool_call:
-                            continue
+                        # If we got a tool call, process it and continue to next iteration
+                        if got_tool_call:
+                            # Increment iteration counter
+                            current_iteration += 1
                             
-                        # If we did get a tool call, break to process it
-                        break
+                            # On last iteration, disable tools to get final response
+                            if current_iteration >= max_iterations - 1:
+                                use_tools = False
+                                print("Final iteration - disabling tools")
+                            
+                            # Continue to next iteration to process tool results
+                            continue
                     
-                    # If we're on the final iteration, disable tools and get final response
-                    if current_iteration >= max_iterations - 1:
-                        use_tools = False
-                        print("Final iteration - disabling tools")
-                        
+                    # If we're not using tools anymore, make final response
+                    if not use_tools:
                         # Make final API request without tools
                         request_data = {
                             "messages": messages,
