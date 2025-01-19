@@ -148,23 +148,43 @@ async def chat_completion(
     
     # In production mode, stream response from Copilot API
     async def generate():
-        async with httpx.AsyncClient() as client:
-            async with client.stream(
-                "POST",
-                "https://api.githubcopilot.com/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {x_github_token}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "messages": messages,
-                    "stream": True
-                }
-            ) as response:
-                async for chunk in response.aiter_bytes():
-                    yield chunk
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                async with client.stream(
+                    "POST",
+                    "https://api.githubcopilot.com/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {x_github_token}",
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
+                    },
+                    json={
+                        "messages": messages,
+                        "stream": True,
+                        "max_tokens": 1000  # Limit response size
+                    }
+                ) as response:
+                    print(f"API response status: {response.status_code}")
+                    if response.status_code != 200:
+                        error_body = await response.aread()
+                        print(f"API error response: {error_body}")
+                        yield b'{"error": "API request failed"}'
+                        return
+                    
+                    async for chunk in response.aiter_bytes():
+                        print(f"Received chunk: {chunk.decode()}")
+                        yield chunk
+        except Exception as e:
+            print(f"Streaming error: {str(e)}")
+            yield b'{"error": "Streaming failed"}'
 
-    return StreamingResponse(generate(), media_type="application/json")
+    return StreamingResponse(
+        generate(),
+        media_type="application/json",
+        headers={
+            "X-Streaming-Status": "active"
+        }
+    )
 
 @app.on_event("shutdown")
 async def shutdown():
