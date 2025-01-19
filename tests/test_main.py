@@ -127,7 +127,8 @@ def test_set_repo_invalid_url(mock_github_user):
         assert len(assistant_messages) > 0
         assert "Error setting repository URL" in assistant_messages[0]["content"]
 
-def test_set_repo_live_gitingest(mock_github_user):
+@pytest.mark.asyncio
+async def test_set_repo_live_gitingest(mock_github_user):
     """Test actual gitingest integration with a real repository"""
     # Clear cache before test
     from app.main import cache
@@ -154,34 +155,39 @@ def test_set_repo_live_gitingest(mock_github_user):
             ]
         }
         
-        # Make request with test client
-        response = client.post(
-            "/",
-            json=payload,
-            headers={}  # No auth header needed in test mode
-        )
-        
-        # Verify response
-        assert response.status_code == 200
-        response_data = response.json()
-        
-        # Verify response structure
-        assert response_data["status"] == "success"
-        assert len(response_data["messages"]) > 0
-        
-        # Verify system message was updated
-        system_messages = [msg for msg in response_data["messages"] if msg["role"] == "system"]
-        assert len(system_messages) > 0
-        
-        # Print the system message for validation
-        print("\nLive System Message:")
-        print(system_messages[0]["content"])
-        print("-" * 80)
-        
-        # Verify base prompt is present
-        assert BASE_SYSTEM_PROMPT in system_messages[0]["content"]
-        
-        # Verify we got some actual repository context
-        assert "Current repository context" in system_messages[0]["content"]
-        assert "Summary:" in system_messages[0]["content"]
-        assert "File Tree:" in system_messages[0]["content"]
+        try:
+            # Make request with test client
+            response = client.post(
+                "/",
+                json=payload,
+                headers={}  # No auth header needed in test mode
+            )
+            
+            # Verify response
+            assert response.status_code == 200
+            response_data = response.json()
+            
+            # Verify response structure
+            assert response_data["status"] == "success"
+            assert len(response_data["messages"]) > 0
+            
+            # Verify system message was updated
+            system_messages = [msg for msg in response_data["messages"] if msg["role"] == "system"]
+            assert len(system_messages) > 0
+            
+            # Print the system message for validation
+            print("\nLive System Message:")
+            print(system_messages[0]["content"])
+            print("-" * 80)
+            
+            # Verify base prompt is present
+            assert BASE_SYSTEM_PROMPT in system_messages[0]["content"]
+            
+            # Verify we got some actual repository context
+            assert "Current repository context" in system_messages[0]["content"]
+            assert "Summary:" in system_messages[0]["content"]
+            assert "File Tree:" in system_messages[0]["content"]
+            
+        except Exception as e:
+            print(f"Error during test: {str(e)}")
+            raise
