@@ -46,7 +46,15 @@ async def cached_ingest(repo_url: str):
         return cache[cache_key]
     
     print(f"Cache miss for {repo_url}, computing...")
-    result = ingest(repo_url)
+    # Run the sync ingest function in a thread pool
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    
+    def sync_ingest():
+        return ingest(repo_url)
+    
+    with ThreadPoolExecutor() as pool:
+        result = await asyncio.get_event_loop().run_in_executor(pool, sync_ingest)
     
     # Store in cache with 1-hour expiration using versioned key
     cache.set(cache_key, result, expire=3600)
