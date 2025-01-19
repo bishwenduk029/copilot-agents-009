@@ -431,6 +431,17 @@ async def execute_repo_navigation_tool(function_call: FunctionCall) -> str:
             
         repo_data = thread_cache[thread_id]
         content = repo_data.get("content", "")
+            
+        # Print debug info
+        print("\n=== Repository Context ===")
+        print(f"Thread ID: {thread_id}")
+        print(f"Repository URL: {repo_data.get('url')}")
+        print("\nRepository Summary:")
+        print(repo_data.get('summary', ''))
+        print("\nRepository Tree:")
+        print(repo_data.get('tree', ''))
+        print("\nRepository Content Preview:")
+        print(content[:1000] + "..." if len(content) > 1000 else content)
         
         # Parse the content digest
         files = []
