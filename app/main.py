@@ -235,6 +235,7 @@ async def chat_completion(
             print(f"\n=== API Request ===")
             print(f"Using tools: {'YES' if use_tools else 'NO'}")
             print(f"Tool choice: {'required' if use_tools else 'none'}")
+            print(f"Token: {x_github_token[:8]}...{x_github_token[-4:]}")
             
             request_data = {
                 "messages": messages,
