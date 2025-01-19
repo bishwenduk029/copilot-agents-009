@@ -248,11 +248,7 @@ async def chat_completion(
                     return
                 
                 async for chunk in response.aiter_bytes():
-                    chunk_str = chunk.decode('utf-8')
-                    if not any(tc in chunk_str for tc in ['"tool_calls"', '"delta"']):
-                        yield chunk
-                    else:
-                        pass
+                    yield chunk  # Pass through all chunks
 
         async def handle_tool_calls(client, messages):
             """Handle tool calls and return updated messages"""
