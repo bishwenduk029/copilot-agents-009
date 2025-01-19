@@ -80,7 +80,8 @@ async def chat_completion(
             thread_cache.set(thread_id, {
                 "url": url,
                 "summary": summary,
-                "tree": tree
+                "tree": tree,
+                "content": content
             }, expire=3600)  # 1 hour cache
             
             # Create a specific acknowledgment message for the LLM
