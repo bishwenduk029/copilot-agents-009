@@ -223,19 +223,6 @@ async def chat_completion(
                     "tool_choice": "auto" if tools else None
                 }
                 
-                # Detailed debug logging
-                print("\n=== API Request Details ===")
-                print("Request URL: https://api.githubcopilot.com/chat/completions")
-                print("Headers:", {
-                    "Authorization": f"Bearer {x_github_token[:10]}...",  # Truncate token for security
-                    "Content-Type": "application/json",
-                    "Accept": "application/json"
-                })
-                print("Request Body:")
-                import json
-                print(json.dumps(request_data, indent=2))
-                print("=======================\n")
-                
                 async with client.stream(
                     "POST", 
                     "https://api.githubcopilot.com/chat/completions",
