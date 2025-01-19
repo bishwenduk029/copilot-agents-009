@@ -164,10 +164,32 @@ async def chat_completion(
         }
     
     # Define available tools with thread context
-    tools = [get_repo_navigation_tool(thread_id)] if thread_id else []
+    tools = []
+    if thread_id:
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": f"navigate_repository_content:{thread_id}",
+                "description": "Navigate the ingested repository content to find specific information. Use this tool when asked deep technical questions about the codebase.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The specific information being searched for in the repository"
+                        },
+                        "file_path": {
+                            "type": "string",
+                            "description": "Optional specific file path to search within"
+                        }
+                    },
+                    "required": ["query"]
+                }
+            }
+        })
 
     # In production mode, stream response from Copilot API
-    async def process_tool_calls(tool_calls: List[ToolCall]) -> List[ChatMessage]:
+    async def process_tool_calls(tool_calls: List[Dict]) -> List[Dict]:
         """Process tool calls and return assistant messages with results"""
         messages = []
         for tool_call in tool_calls:
@@ -253,58 +275,11 @@ async def chat_completion(
         }
     )
 
-class FunctionTool(BaseModel):
-    type: str = "function"
-    function: Dict[str, Any]
-    
-    def dict(self, *args, **kwargs):
-        # Custom dict method to ensure proper tool format
-        return {
-            "type": self.type,
-            "function": {
-                "name": self.function["name"],
-                "description": self.function["description"],
-                "parameters": self.function["parameters"]
-            }
-        }
-
-class FunctionCall(BaseModel):
-    name: str
-    arguments: str
-
+# Tool call processing types
 class ToolCall(BaseModel):
     id: str
     type: str
-    function: FunctionCall
-
-class ChatMessage(BaseModel):
-    role: str
-    content: str
-    tool_calls: List[ToolCall] = []
-
-# Define the repository navigation tool
-def get_repo_navigation_tool(thread_id: str) -> FunctionTool:
-    return FunctionTool(
-        type="function",
-        function={
-            "name": f"navigate_repository_content:{thread_id}",
-            "description": "Navigate the ingested repository content to find specific information. Use this tool when asked deep technical questions about the codebase.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The specific information being searched for in the repository"
-                    },
-                    "file_path": {
-                        "type": "string",
-                        "description": "Optional specific file path to search within"
-                    }
-                },
-                "required": ["query"]
-            }
-        }
-    )
+    function: Dict[str, Any]
 
 async def execute_repo_navigation_tool(function_call: FunctionCall) -> str:
     """Execute the repository navigation tool to search repository content"""
