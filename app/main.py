@@ -6,7 +6,7 @@ from diskcache import Cache
 from pathlib import Path
 import os
 
-# System prompts
+# System prompts (exported for testing)
 BASE_SYSTEM_PROMPT = """You are a wise technical assistant with deep knowledge of software development.
 Your role is to help developers understand and work with code.
 Always respond factually and precisely.
