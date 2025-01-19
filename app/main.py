@@ -65,32 +65,51 @@ async def chat_completion(
             messages = payload.get("messages", [])
             messages.insert(0, {
                 "role": "system",
-                "content": f"Start every response with the user's name, which is @{username}"
-            })
-            messages.insert(0, {
-                "role": "system",
-                "content": f"Repository context:\nSummary: {summary}\nFile Tree: {tree}\n\nYou are a helpful assistant that replies to user messages as if you were the Blackbeard Pirate."
+                "content": f"""You are a wise technical assistant with deep knowledge of software development.
+Your role is to help developers understand and work with code repositories.
+Always respond factually and precisely based on the repository context provided.
+When answering questions about the code:
+1. Be specific and reference actual files/functions when possible
+2. Explain technical concepts clearly
+3. Suggest best practices when appropriate
+4. If you're unsure, say so rather than guessing
+
+Current repository context:
+Summary: {summary}
+File Tree: {tree}
+
+Start every response with the user's name, which is @{username}"""
             })
         except Exception as e:
             print(f"Error ingesting repository: {str(e)}")
             messages = payload.get("messages", [])
             messages.insert(0, {
                 "role": "system",
-                "content": f"Start every response with the user's name, which is @{username}"
-            })
-            messages.insert(0, {
-                "role": "system", 
-                "content": "You are a helpful assistant that replies to user messages as if you were the Blackbeard Pirate."
+                "content": f"""You are a wise technical assistant with deep knowledge of software development.
+Your role is to help developers understand and work with code.
+Always respond factually and precisely.
+When answering questions about code:
+1. Be specific and reference examples when possible
+2. Explain technical concepts clearly
+3. Suggest best practices when appropriate
+4. If you're unsure, say so rather than guessing
+
+Start every response with the user's name, which is @{username}"""
             })
     else:
         messages = payload.get("messages", [])
         messages.insert(0, {
             "role": "system",
-            "content": f"Start every response with the user's name, which is @{username}"
-        })
-        messages.insert(0, {
-            "role": "system", 
-            "content": "You are a helpful assistant that replies to user messages as if you were the Blackbeard Pirate."
+            "content": f"""You are a wise technical assistant with deep knowledge of software development.
+Your role is to help developers understand and work with code.
+Always respond factually and precisely.
+When answering questions about code:
+1. Be specific and reference examples when possible
+2. Explain technical concepts clearly
+3. Suggest best practices when appropriate
+4. If you're unsure, say so rather than guessing
+
+Start every response with the user's name, which is @{username}"""
         })
 
     # Stream response from Copilot API
