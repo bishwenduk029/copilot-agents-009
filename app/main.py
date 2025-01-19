@@ -26,6 +26,7 @@ CACHE_DIR.mkdir(exist_ok=True)
 
 # Initialize diskcache
 cache = Cache(str(CACHE_DIR))
+thread_cache = Cache(str(CACHE_DIR / "threads"))
 
 app = FastAPI()
 
@@ -68,18 +69,40 @@ async def chat_completion(
     # Get request payload
     payload = await request.json()
     print("Payload:", payload)
-
-    # Add repository context if URL is provided
+    
     messages = payload.get("messages", [])
     system_message = BASE_SYSTEM_PROMPT
+    thread_id = payload.get("copilot_thread_id")
     
-    if "repo_url" in payload:
+    # Check if this is a /set url command
+    if messages and messages[-1]["role"] == "user" and messages[-1]["content"].startswith("/set"):
         try:
-            # Use cached ingest
-            summary, tree, content = await cached_ingest(payload["repo_url"])
+            # Extract URL from command
+            url = messages[-1]["content"].split(" ")[-1]
+            if not url.startswith("http"):
+                raise ValueError("Invalid URL format")
+            
+            # Ingest and cache the repo data
+            summary, tree, content = await cached_ingest(url)
+            
+            # Store URL against thread ID
+            thread_cache.set(thread_id, {
+                "url": url,
+                "summary": summary,
+                "tree": tree
+            }, expire=3600)  # 1 hour cache
+            
             system_message += f"\n\n{REPO_CONTEXT_PROMPT.format(summary=summary, tree=tree)}"
         except Exception as e:
-            print(f"Error ingesting repository: {str(e)}")
+            print(f"Error setting repository URL: {str(e)}")
+            messages.append({
+                "role": "assistant",
+                "content": f"Error setting repository URL: {str(e)}"
+            })
+    elif thread_id and thread_id in thread_cache:
+        # Use cached repo context for this thread
+        repo_data = thread_cache[thread_id]
+        system_message += f"\n\n{REPO_CONTEXT_PROMPT.format(summary=repo_data['summary'], tree=repo_data['tree'])}"
     
     # Add personalized greeting
     system_message += f"\n\nStart every response with the user's name, which is @{username}"
@@ -112,3 +135,4 @@ async def chat_completion(
 @app.on_event("shutdown")
 async def shutdown():
     cache.close()
+    thread_cache.close()
