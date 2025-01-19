@@ -224,7 +224,7 @@ async def chat_completion(
                 "messages": messages,
                 "stream": True,
                 "tools": tools if use_tools else None,
-                "tool_choice": "auto" if use_tools else None
+                "tool_choice": "required" if use_tools else None
             }
             
             async with client.stream(
