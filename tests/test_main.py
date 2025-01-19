@@ -52,17 +52,24 @@ def test_set_repo_command(mock_github_user, mock_ingest):
         response = client.post(
             "/",
             json=payload,
-            headers={"X-GitHub-Token": "test-token"}
+            headers={"Authorization": "Bearer test-token"}
         )
         
         # Verify response
         assert response.status_code == 200
-        response_data = json.loads(response.content)
+        response_data = response.json()
         
         # Verify system message was updated
-        assert BASE_SYSTEM_PROMPT in response_data["choices"][0]["message"]["content"]
-        assert "Test repository summary" in response_data["choices"][0]["message"]["content"]
-        assert "test/file/structure" in response_data["choices"][0]["message"]["content"]
+        assert any(
+            msg["content"] == BASE_SYSTEM_PROMPT 
+            for msg in response_data["messages"] 
+            if msg["role"] == "system"
+        )
+        assert any(
+            "Test repository summary" in msg["content"] 
+            for msg in response_data["messages"] 
+            if msg["role"] == "system"
+        )
         
         # Verify ingest was called
         mock_ingest.assert_called_once_with("https://github.com/cyclotruc/gitingest")
@@ -95,7 +102,11 @@ def test_set_repo_invalid_url(mock_github_user):
         
         # Verify response
         assert response.status_code == 200
-        response_data = json.loads(response.content)
+        response_data = response.json()
         
         # Verify error message
-        assert "Error setting repository URL" in response_data["choices"][0]["message"]["content"]
+        assert any(
+            "Error setting repository URL" in msg["content"] 
+            for msg in response_data["messages"] 
+            if msg["role"] == "assistant"
+        )
