@@ -2,8 +2,31 @@ from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.responses import StreamingResponse
 import httpx
 from gitingest import ingest
+from diskcache import Cache
+from pathlib import Path
+import os
+
+# Create cache directory if it doesn't exist
+CACHE_DIR = Path(".cache")
+CACHE_DIR.mkdir(exist_ok=True)
+
+# Initialize diskcache
+cache = Cache(str(CACHE_DIR))
 
 app = FastAPI()
+
+async def cached_ingest(repo_url: str):
+    # Check cache first
+    if repo_url in cache:
+        print(f"Cache hit for {repo_url}")
+        return cache[repo_url]
+    
+    print(f"Cache miss for {repo_url}, computing...")
+    result = ingest(repo_url)
+    
+    # Store in cache with 1-hour expiration
+    cache.set(repo_url, result, expire=3600)
+    return result
 
 @app.get("/")
 async def root():
@@ -35,8 +58,8 @@ async def chat_completion(
     # Add repository context if URL is provided
     if "repo_url" in payload:
         try:
-            # Ingest repository content
-            summary, tree, content = ingest(payload["repo_url"])
+            # Use cached ingest
+            summary, tree, content = await cached_ingest(payload["repo_url"])
             
             # Add repository context to messages
             messages = payload.get("messages", [])
@@ -89,3 +112,7 @@ async def chat_completion(
                     yield chunk
 
     return StreamingResponse(generate(), media_type="application/json")
+
+@app.on_event("shutdown")
+async def shutdown():
+    cache.close()
