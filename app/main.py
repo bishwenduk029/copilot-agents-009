@@ -192,8 +192,17 @@ async def chat_completion(
                 }
                 
                 if use_tools:
-                    request_data["tools"] = [tool.dict() for tool in tools]
-                    request_data["tool_choice"] = "auto"
+                    # Format tools according to GitHub Copilot API spec
+                    request_data["tools"] = [{
+                        "type": "function",
+                        "function": {
+                            "name": tool.function["name"],
+                            "description": tool.function["description"],
+                            "parameters": tool.function["parameters"]
+                        }
+                    } for tool in tools]
+                    # Set tool_choice to none initially, let the model decide
+                    request_data["tool_choice"] = None
                 
                 async with client.stream(
                     "POST",
@@ -247,6 +256,17 @@ async def chat_completion(
 class FunctionTool(BaseModel):
     type: str = "function"
     function: Dict[str, Any]
+    
+    def dict(self, *args, **kwargs):
+        # Custom dict method to ensure proper tool format
+        return {
+            "type": self.type,
+            "function": {
+                "name": self.function["name"],
+                "description": self.function["description"],
+                "parameters": self.function["parameters"]
+            }
+        }
 
 class FunctionCall(BaseModel):
     name: str
