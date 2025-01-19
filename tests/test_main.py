@@ -70,6 +70,12 @@ def test_set_repo_command(mock_github_user, mock_ingest):
         # Verify system message was updated
         system_messages = [msg for msg in response_data["messages"] if msg["role"] == "system"]
         assert len(system_messages) > 0
+        
+        # Print the system message for validation
+        print("\nFinal System Message:")
+        print(system_messages[0]["content"])
+        print("-" * 80)
+        
         assert BASE_SYSTEM_PROMPT in system_messages[0]["content"]
         assert "Test repository summary" in system_messages[0]["content"]
         
