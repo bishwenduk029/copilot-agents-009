@@ -342,6 +342,30 @@ async def chat_completion(
                                         else:
                                             print("Warning: Got finish_reason but no current tool call")
                                         
+                                        # Only process tool calls after we have the complete response
+                                        continue
+                                        
+                                    # If we have a complete tool call with finish_reason, process it
+                                    if got_tool_call and tool_calls and choice.get("finish_reason") == "tool_calls":
+                                        print("\n=== Processing Tool Calls ===")
+                                        print(f"Tool calls to process: {len(tool_calls)}")
+                                        for i, tool_call in enumerate(tool_calls):
+                                            print(f"\nTool Call {i+1}:")
+                                            print(f"ID: {tool_call['id']}")
+                                            print(f"Type: {tool_call['type']}")
+                                            print(f"Function: {tool_call['function']['name']}")
+                                            print(f"Arguments: {tool_call['function']['arguments']}")
+                                        
+                                        tool_messages = await process_tool_calls(tool_calls)
+                                        messages.extend(tool_messages)
+                                        
+                                        # Update iteration state
+                                        current_iteration += 1
+                                        if current_iteration >= max_iterations - 1:
+                                            use_tools = False
+                                            print("Final iteration - disabling tools")
+                                        break
+                                        
                 except json.JSONDecodeError as e:
                     print(f"\n=== JSON Decode Error ===")
                     print(f"Error: {str(e)}")
@@ -353,7 +377,8 @@ async def chat_completion(
                     # Otherwise skip this chunk
                     continue
                     
-            # If we got tool calls, process them
+            # Process tool calls only after we've received the complete response
+            # with finish_reason: "tool_calls"
             if got_tool_call and tool_calls:
                 print("\n=== Processing Tool Calls ===")
                 print(f"Tool calls to process: {len(tool_calls)}")
