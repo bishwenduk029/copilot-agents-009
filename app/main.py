@@ -320,14 +320,14 @@ async def chat_completion(
                         if got_tool_call:
                             # Increment iteration counter
                             current_iteration += 1
-                            
+                        
                             # On last iteration, disable tools to get final response
                             if current_iteration >= max_iterations - 1:
                                 use_tools = False
                                 print("Final iteration - disabling tools")
-                            
-                            # Continue to next iteration to process tool results
-                            continue
+                        
+                            # Break to process tool results
+                            break
                     
                     # If we're not using tools anymore, make final response
                     if not use_tools:
