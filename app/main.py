@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.responses import StreamingResponse
 import httpx
+from gitingest import ingest
 
 app = FastAPI()
 
@@ -31,16 +32,43 @@ async def chat_completion(
     payload = await request.json()
     print("Payload:", payload)
 
-    # Add pirate system messages
-    messages = payload.get("messages", [])
-    messages.insert(0, {
-        "role": "system",
-        "content": f"Start every response with the user's name, which is @{username}"
-    })
-    messages.insert(0, {
-        "role": "system", 
-        "content": "You are a helpful assistant that replies to user messages as if you were the Blackbeard Pirate."
-    })
+    # Add repository context if URL is provided
+    if "repo_url" in payload:
+        try:
+            # Ingest repository content
+            summary, tree, content = ingest(payload["repo_url"])
+            
+            # Add repository context to messages
+            messages = payload.get("messages", [])
+            messages.insert(0, {
+                "role": "system",
+                "content": f"Start every response with the user's name, which is @{username}"
+            })
+            messages.insert(0, {
+                "role": "system",
+                "content": f"Repository context:\nSummary: {summary}\nFile Tree: {tree}\n\nYou are a helpful assistant that replies to user messages as if you were the Blackbeard Pirate."
+            })
+        except Exception as e:
+            print(f"Error ingesting repository: {str(e)}")
+            messages = payload.get("messages", [])
+            messages.insert(0, {
+                "role": "system",
+                "content": f"Start every response with the user's name, which is @{username}"
+            })
+            messages.insert(0, {
+                "role": "system", 
+                "content": "You are a helpful assistant that replies to user messages as if you were the Blackbeard Pirate."
+            })
+    else:
+        messages = payload.get("messages", [])
+        messages.insert(0, {
+            "role": "system",
+            "content": f"Start every response with the user's name, which is @{username}"
+        })
+        messages.insert(0, {
+            "role": "system", 
+            "content": "You are a helpful assistant that replies to user messages as if you were the Blackbeard Pirate."
+        })
 
     # Stream response from Copilot API
     async def generate():
