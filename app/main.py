@@ -212,16 +212,26 @@ async def chat_completion(
         return messages
 
     async def generate():
-        # Add tools to the request if this is the first iteration
+        # Track tool call iterations
+        max_iterations = 3
+        current_iteration = 0
         use_tools = bool(tools)
+        
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
-                request_data = {
-                    "messages": messages,
-                    "stream": True,
-                    "tools": tools if tools else None,
-                    "tool_choice": "auto" if tools else None
-                }
+                while current_iteration < max_iterations:
+                    print(f"\n=== Tool Call Iteration {current_iteration + 1} ===")
+                    print(f"Using tools: {use_tools}")
+                    print(f"Messages count: {len(messages)}")
+                    
+                    request_data = {
+                        "messages": messages,
+                        "stream": True,
+                        "tools": tools if use_tools else None,
+                        "tool_choice": "auto" if use_tools else None
+                    }
+                    
+                    print("Request data:", json.dumps(request_data, indent=2))
                 
                 async with client.stream(
                     "POST", 
@@ -277,9 +287,23 @@ async def chat_completion(
                                         continue
                                 
                                 # Process the complete tool calls
+                                print("\nProcessing tool calls...")
+                                print("Tool calls received:", json.dumps(tool_calls, indent=2))
+                                
                                 tool_messages = await process_tool_calls(tool_calls)
+                                print("Tool messages generated:", json.dumps(tool_messages, indent=2))
+                                
                                 messages.extend(tool_messages)
                                 request_data["messages"] = messages
+                                
+                                # Increment iteration counter
+                                current_iteration += 1
+                                
+                                # On last iteration, disable tools to get final response
+                                if current_iteration >= max_iterations - 1:
+                                    use_tools = False
+                                    print("Final iteration - disabling tools")
+                                
                                 continue
                                 
                         except json.JSONDecodeError as e:
@@ -289,7 +313,11 @@ async def chat_completion(
                             print(f"Error processing tool calls: {str(e)}")
                             continue
                         
-                        yield chunk
+                        # Only yield chunks that aren't tool calls
+                        if not any(tc in chunk_str for tc in ['"tool_calls"', '"delta"']):
+                            yield chunk
+                        else:
+                            print("Skipping tool call chunk from final output")
         except Exception as e:
             print(f"Streaming error: {str(e)}")
             yield b'{"error": "Streaming failed"}'
