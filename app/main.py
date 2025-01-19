@@ -223,8 +223,11 @@ async def chat_completion(
                     # Set tool_choice to none initially, let the model decide
                     request_data["tool_choice"] = None
                 
+                # Debug print the request data
+                print("Request data:", request_data)
+                
                 async with client.stream(
-                    "POST",
+                    "POST", 
                     "https://api.githubcopilot.com/chat/completions",
                     headers={
                         "Authorization": f"Bearer {x_github_token}",
