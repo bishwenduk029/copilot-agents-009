@@ -260,6 +260,9 @@ async def chat_completion(
             
             print(f"\n=== Tool Call Iteration {current_iteration + 1} ===")
             
+            # Track if we got a tool call
+            got_tool_call = False
+            
             # Make initial API request
             async for chunk in make_api_request(client, messages, use_tools):
                 chunk_str = chunk.decode('utf-8')
@@ -272,16 +275,19 @@ async def chat_completion(
                         tool_messages = await process_tool_calls(tool_calls)
                         messages.extend(tool_messages)
                         
-                        # Update iteration state
-                        current_iteration += 1
-                        if current_iteration >= max_iterations - 1:
-                            use_tools = False
-                            print("Final iteration - disabling tools")
-                            
-                        return messages
+                        # Mark that we got a tool call
+                        got_tool_call = True
+                        break
                 except json.JSONDecodeError:
                     continue
                     
+            # Only increment counter if we actually processed a tool call
+            if got_tool_call:
+                current_iteration += 1
+                if current_iteration >= max_iterations - 1:
+                    use_tools = False
+                    print("Final iteration - disabling tools")
+            
             return messages
 
         try:
