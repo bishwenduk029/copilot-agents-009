@@ -221,7 +221,7 @@ async def chat_completion(
                     # Format tools according to GitHub Copilot API spec
                     request_data["tools"] = tools
                     # Set tool_choice to none initially, let the model decide
-                    request_data["tool_choice"] = None
+                    request_data["tool_choice"] = "auto"
                 
                 # Debug print the request data
                 print("Request data:", request_data)
