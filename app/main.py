@@ -187,20 +187,16 @@ async def chat_completion(
             "type": "function",
             "function": {
                 "name": "navigate_repository_content",
-                "description": "Search the repository content for specific information. Use this when asked technical questions about the codebase.",
+                "description": "Retrieve the contents of a specific file from the repository. Use this when you need to see the contents of a particular file to answer a question.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "The specific information being searched for in the repository"
-                        },
                         "file_path": {
                             "type": "string", 
-                            "description": "Optional specific file path to search within"
+                            "description": "The full path to the file to retrieve"
                         }
                     },
-                    "required": ["query"]
+                    "required": ["file_path"]
                 }
             }
         }]
@@ -416,16 +412,18 @@ class ChatMessage(BaseModel):
     tool_call_id: Optional[str] = None
 
 async def execute_repo_navigation_tool(function_call: FunctionCall) -> str:
-    """Execute the repository navigation tool to search repository content"""
+    """Execute the repository navigation tool to retrieve file contents"""
     from typing import Optional
     import json
     
     try:
         # Parse the function arguments
         args = json.loads(function_call.arguments)
-        query = args.get("query", "").lower()
         file_path = args.get("file_path")
         
+        if not file_path:
+            return "Error: No file path specified"
+            
         # Get the cached repo data for this thread
         thread_id = function_call.name.split(":")[-1] if ":" in function_call.name else None
         if not thread_id or thread_id not in thread_cache:
@@ -443,9 +441,9 @@ async def execute_repo_navigation_tool(function_call: FunctionCall) -> str:
                 # Start new file section
                 if current_file:
                     files.append(current_file)
-                file_path = line.split("File:")[1].strip()
+                current_file_path = line.split("File:")[1].strip()
                 current_file = {
-                    "path": file_path,
+                    "path": current_file_path,
                     "content": ""
                 }
             elif current_file:
@@ -454,38 +452,18 @@ async def execute_repo_navigation_tool(function_call: FunctionCall) -> str:
         if current_file:
             files.append(current_file)
             
-        # Search logic
-        results = []
-        
+        # Find exact file match
+        found_file = None
         for file in files:
-            # Skip if specific file path was requested and doesn't match
-            if file_path and file["path"].lower() != file_path.lower():
-                continue
+            if file["path"].lower() == file_path.lower():
+                found_file = file
+                break
                 
-            # Check if query matches file path or content
-            if query in file["path"].lower() or query in file["content"].lower():
-                # Include first 200 chars and last 200 chars of content
-                content_preview = file["content"][:200] + "..." + file["content"][-200:]
-                results.append({
-                    "file": file["path"],
-                    "content_preview": content_preview.strip()
-                })
-                
-                # Limit to 5 results to avoid overwhelming the LLM
-                if len(results) >= 5:
-                    break
-                    
-        if not results:
-            return "No matching files found"
+        if not found_file:
+            return f"File not found: {file_path}"
             
-        # Format results for LLM
-        response = "Found matching files:\n"
-        for result in results:
-            response += f"\nFile: {result['file']}\n"
-            response += f"Preview: {result['content_preview']}\n"
-            response += "---\n"
-            
-        return response
+        # Return full file contents
+        return f"Contents of {found_file['path']}:\n\n{found_file['content']}"
         
     except Exception as e:
         return f"Error executing repository navigation: {str(e)}"
