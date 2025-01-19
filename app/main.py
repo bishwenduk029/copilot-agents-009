@@ -19,7 +19,7 @@ When answering questions about code:
 REPO_CONTEXT_PROMPT = """Current repository context:
 Summary: {summary}
 File Tree: {tree}
-Repository Content: {content}"""
+"""
 
 # Create cache directory if it doesn't exist
 CACHE_DIR = Path(".cache")
@@ -144,7 +144,7 @@ async def chat_completion(
     elif thread_id and thread_id in thread_cache:
         # Use cached repo context for this thread
         repo_data = thread_cache[thread_id]
-        system_message += f"\n\n{REPO_CONTEXT_PROMPT.format(summary=repo_data['summary'], tree=repo_data['tree'], content=repo_data['content'])}"
+        system_message += f"\n\n{REPO_CONTEXT_PROMPT.format(summary=repo_data['summary'], tree=repo_data['tree'])}"
     
     messages.insert(0, {
         "role": "system",
