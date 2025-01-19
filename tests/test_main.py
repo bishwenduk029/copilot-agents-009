@@ -88,6 +88,7 @@ def test_set_repo_command(mock_github_user, mock_ingest):
         print("-" * 80)
 
 def test_set_repo_invalid_url(mock_github_user):
+    """Test handling of invalid repository URLs"""
     # Mock GitHub API response
     with patch("httpx.AsyncClient.get") as mock_get:
         mock_get.return_value = MagicMock(
@@ -125,3 +126,62 @@ def test_set_repo_invalid_url(mock_github_user):
         assistant_messages = [msg for msg in response_data["messages"] if msg["role"] == "assistant"]
         assert len(assistant_messages) > 0
         assert "Error setting repository URL" in assistant_messages[0]["content"]
+
+def test_set_repo_live_gitingest(mock_github_user):
+    """Test actual gitingest integration with a real repository"""
+    # Clear cache before test
+    from app.main import cache
+    cache.clear()
+    
+    # Use a small, public test repository
+    test_repo_url = "https://github.com/octocat/Hello-World"
+    
+    # Mock GitHub API response
+    with patch("httpx.AsyncClient.get") as mock_get:
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: mock_github_user
+        )
+        
+        # Create test payload
+        payload = {
+            "copilot_thread_id": "test-thread-123",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": f"/set {test_repo_url}"
+                }
+            ]
+        }
+        
+        # Make request with test client
+        response = client.post(
+            "/",
+            json=payload,
+            headers={}  # No auth header needed in test mode
+        )
+        
+        # Verify response
+        assert response.status_code == 200
+        response_data = response.json()
+        
+        # Verify response structure
+        assert response_data["status"] == "success"
+        assert len(response_data["messages"]) > 0
+        
+        # Verify system message was updated
+        system_messages = [msg for msg in response_data["messages"] if msg["role"] == "system"]
+        assert len(system_messages) > 0
+        
+        # Print the system message for validation
+        print("\nLive System Message:")
+        print(system_messages[0]["content"])
+        print("-" * 80)
+        
+        # Verify base prompt is present
+        assert BASE_SYSTEM_PROMPT in system_messages[0]["content"]
+        
+        # Verify we got some actual repository context
+        assert "Current repository context" in system_messages[0]["content"]
+        assert "Summary:" in system_messages[0]["content"]
+        assert "File Tree:" in system_messages[0]["content"]
