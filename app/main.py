@@ -215,6 +215,8 @@ async def chat_completion(
         max_iterations = 3
         current_iteration = 0
         use_tools = bool(tools)
+        # Create local copy of messages to avoid scope issues
+        local_messages = messages.copy()
         
         async def make_api_request(client, messages, use_tools):
             """Make API request and handle response"""
@@ -287,15 +289,15 @@ async def chat_completion(
                 while current_iteration < max_iterations:
                     # Handle tool calls if needed
                     if use_tools:
-                        messages = await handle_tool_calls(client, messages)
+                        local_messages = await handle_tool_calls(client, local_messages)
                         if not use_tools:
                             # Make final request without tools
-                            async for chunk in make_api_request(client, messages, False):
+                            async for chunk in make_api_request(client, local_messages, False):
                                 yield chunk
                             return
                     else:
                         # Make final request without tools
-                        async for chunk in make_api_request(client, messages, False):
+                        async for chunk in make_api_request(client, local_messages, False):
                             yield chunk
                         return
                         
@@ -308,7 +310,12 @@ async def chat_completion(
                                 "Content-Type": "application/json",
                                 "Accept": "application/json"
                             },
-                            json=request_data
+                            json={
+                                "messages": local_messages,
+                                "stream": True,
+                                "tools": None,
+                                "tool_choice": None
+                            }
                         ) as response:
                             if response.status_code != 200:
                                 error_body = await response.aread()
