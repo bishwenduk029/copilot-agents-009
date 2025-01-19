@@ -25,23 +25,31 @@ Repository Content: {content}"""
 CACHE_DIR = Path(".cache")
 CACHE_DIR.mkdir(exist_ok=True)
 
-# Initialize diskcache
+# Cache version - increment this when gitingest format changes
+CACHE_VERSION = "v2"  # Added content field
+
+# Initialize diskcache with versioned keys
 cache = Cache(str(CACHE_DIR))
 thread_cache = Cache(str(CACHE_DIR / "threads"))
+
+def get_versioned_key(key: str) -> str:
+    """Get a versioned cache key to prevent stale data"""
+    return f"{CACHE_VERSION}:{key}"
 
 app = FastAPI()
 
 async def cached_ingest(repo_url: str):
-    # Check cache first
-    if repo_url in cache:
+    # Check cache first with versioned key
+    cache_key = get_versioned_key(repo_url)
+    if cache_key in cache:
         print(f"Cache hit for {repo_url}")
-        return cache[repo_url]
+        return cache[cache_key]
     
     print(f"Cache miss for {repo_url}, computing...")
     result = ingest(repo_url)
     
-    # Store in cache with 1-hour expiration
-    cache.set(repo_url, result, expire=3600)
+    # Store in cache with 1-hour expiration using versioned key
+    cache.set(cache_key, result, expire=3600)
     return result
 
 @app.get("/")
