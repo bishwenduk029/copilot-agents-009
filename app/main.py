@@ -324,20 +324,57 @@ async def chat_completion(
                             else:
                                 print("Skipping tool call chunk from final output")
                         
-                        # If we didn't get a tool call, break the loop
+                        # If we didn't get a tool call, continue to next iteration
                         if not got_tool_call:
-                            break
-                
-                    # Final response without tools
-                    if not use_tools:
-                        print("\n=== Final Response ===")
-                        async for chunk in response.aiter_bytes():
-                            chunk_str = chunk.decode('utf-8')
-                            if not any(tc in chunk_str for tc in ['"tool_calls"', '"delta"']):
-                                yield chunk
-                            else:
-                                print("Skipping tool call chunk from final output")
-                        return
+                            continue
+                            
+                        # If we did get a tool call, break to process it
+                        break
+                    
+                    # If we're on the final iteration, disable tools and get final response
+                    if current_iteration >= max_iterations - 1:
+                        use_tools = False
+                        print("Final iteration - disabling tools")
+                        
+                        # Make final API request without tools
+                        request_data = {
+                            "messages": messages,
+                            "stream": True,
+                            "tools": None,
+                            "tool_choice": None
+                        }
+                        
+                        print("\n=== Final Request ===")
+                        print("Request data:", json.dumps(request_data, indent=2))
+                        
+                        async with client.stream(
+                            "POST", 
+                            "https://api.githubcopilot.com/chat/completions",
+                            headers={
+                                "Authorization": f"Bearer {x_github_token}",
+                                "Content-Type": "application/json",
+                                "Accept": "application/json"
+                            },
+                            json=request_data
+                        ) as response:
+                            if response.status_code != 200:
+                                error_body = await response.aread()
+                                print("\n=== API Error Details ===")
+                                print(f"Status Code: {response.status_code}")
+                                print("Response Headers:", dict(response.headers))
+                                print("Response Body:", error_body)
+                                print("=======================\n")
+                                yield b'{"error": "API request failed"}'
+                                return
+                            
+                            print("\n=== Final Response ===")
+                            async for chunk in response.aiter_bytes():
+                                chunk_str = chunk.decode('utf-8')
+                                if not any(tc in chunk_str for tc in ['"tool_calls"', '"delta"']):
+                                    yield chunk
+                                else:
+                                    print("Skipping tool call chunk from final output")
+                            return
         except Exception as e:
             print(f"Streaming error: {str(e)}")
             yield b'{"error": "Streaming failed"}'
