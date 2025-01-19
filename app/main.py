@@ -179,7 +179,6 @@ async def chat_completion(
                         "max_tokens": 1000  # Limit response size
                     }
                 ) as response:
-                    print(f"API response status: {response.status_code}")
                     if response.status_code != 200:
                         error_body = await response.aread()
                         print(f"API error response: {error_body}")
@@ -187,7 +186,6 @@ async def chat_completion(
                         return
                     
                     async for chunk in response.aiter_bytes():
-                        print(f"Received chunk: {chunk.decode()}")
                         yield chunk
         except Exception as e:
             print(f"Streaming error: {str(e)}")
