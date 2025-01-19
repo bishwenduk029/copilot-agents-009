@@ -82,7 +82,21 @@ async def chat_completion(
                 raise ValueError("Invalid URL format")
             
             # Ingest and cache the repo data
-            summary, tree, content = await cached_ingest(url)
+            try:
+                result = await cached_ingest(url)
+                summary = result[0]
+                tree = result[1]
+                content = result[2]
+            except Exception as e:
+                print(f"Error ingesting repository: {str(e)}")
+                messages.append({
+                    "role": "assistant",
+                    "content": f"Error ingesting repository: {str(e)}"
+                })
+                return {
+                    "messages": messages,
+                    "status": "error"
+                }
             
             # Store URL against thread ID
             thread_cache.set(thread_id, {
