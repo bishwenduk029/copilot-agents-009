@@ -212,16 +212,23 @@ async def chat_completion(
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 request_data = {
+                    "model": "gpt-4",  # Explicitly specify the model
                     "messages": messages,
                     "stream": True,
-                    "max_tokens": 1000
+                    "max_tokens": 1000,
+                    "temperature": 0.7
                 }
                 
                 if use_tools:
                     # Format tools according to GitHub Copilot API spec
                     request_data["tools"] = tools
                     # Set tool_choice to none initially, let the model decide
-                    request_data["tool_choice"] = "auto"
+                    request_data["tool_choice"] = {
+                        "type": "function",
+                        "function": {
+                            "name": tools[0]["function"]["name"]  # Use first tool's name
+                        }
+                    } if tools else None
                 
                 # Detailed debug logging
                 print("\n=== API Request Details ===")
@@ -242,7 +249,9 @@ async def chat_completion(
                     headers={
                         "Authorization": f"Bearer {x_github_token}",
                         "Content-Type": "application/json",
-                        "Accept": "application/json"
+                        "Accept": "application/json",
+                        "X-GitHub-Api-Version": "2022-11-28",  # Required API version
+                        "User-Agent": "GitHub-Copilot-Chat/1.0"  # Required user agent
                     },
                     json=request_data
                 ) as response:
