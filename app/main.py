@@ -193,15 +193,16 @@ async def chat_completion(
         """Process tool calls and return assistant messages with results"""
         messages = []
         for tool_call in tool_calls:
-            if tool_call["function"]["name"].startswith("navigate_repository_content"):
+            function = tool_call.get("function", {})
+            if function.get("name", "").startswith("navigate_repository_content"):
                 result = await execute_repo_navigation_tool(FunctionCall(
-                    name=tool_call["function"]["name"],
-                    arguments=tool_call["function"]["arguments"]
+                    name=function.get("name", ""),
+                    arguments=function.get("arguments", "{}")
                 ))
                 messages.append({
                     "role": "tool",
                     "content": result,
-                    "tool_call_id": tool_call["id"]
+                    "tool_call_id": tool_call.get("id", "")
                 })
         return messages
 
@@ -250,7 +251,7 @@ async def chat_completion(
                                     tool_calls = data["choices"][0]["message"]["tool_calls"]
                                     tool_messages = await process_tool_calls(tool_calls)
                                     # Add tool responses to messages and make a new request
-                                    messages.extend([msg.dict() for msg in tool_messages])
+                                    messages.extend(tool_messages)
                                     # Update request data with new messages
                                     request_data["messages"] = messages
                                     # Continue streaming with updated messages
