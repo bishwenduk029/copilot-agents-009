@@ -167,9 +167,22 @@ async def chat_completion(
     tools = [get_repo_navigation_tool(thread_id)] if thread_id else []
 
     # In production mode, stream response from Copilot API
+    async def process_tool_calls(tool_calls: List[ToolCall]) -> List[ChatMessage]:
+        """Process tool calls and return assistant messages with results"""
+        messages = []
+        for tool_call in tool_calls:
+            if tool_call.function.name.startswith("navigate_repository_content"):
+                result = await execute_repo_navigation_tool(tool_call.function)
+                messages.append(ChatMessage(
+                    role="tool",
+                    content=result,
+                    tool_call_id=tool_call.id
+                ))
+        return messages
+
     async def generate():
         # Add tools to the request if this is the first iteration
-        use_tools = True
+        use_tools = bool(tools)
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 async with client.stream(
@@ -193,6 +206,25 @@ async def chat_completion(
                         return
                     
                     async for chunk in response.aiter_bytes():
+                        # Check if the chunk contains tool calls
+                        chunk_str = chunk.decode('utf-8')
+                        if '"tool_calls":' in chunk_str:
+                            # Parse the tool calls and process them
+                            try:
+                                import json
+                                data = json.loads(chunk_str)
+                                if data.get("choices") and data["choices"][0].get("message", {}).get("tool_calls"):
+                                    tool_calls = data["choices"][0]["message"]["tool_calls"]
+                                    tool_messages = await process_tool_calls(tool_calls)
+                                    # Add tool responses to messages and make a new request
+                                    messages.extend([msg.dict() for msg in tool_messages])
+                                    # Update request data with new messages
+                                    request_data["messages"] = messages
+                                    # Continue streaming with updated messages
+                                    continue
+                            except Exception as e:
+                                print(f"Error processing tool calls: {str(e)}")
+                        
                         yield chunk
         except Exception as e:
             print(f"Streaming error: {str(e)}")
