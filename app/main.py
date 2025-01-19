@@ -6,6 +6,20 @@ from diskcache import Cache
 from pathlib import Path
 import os
 
+# System prompts
+BASE_SYSTEM_PROMPT = """You are a wise technical assistant with deep knowledge of software development.
+Your role is to help developers understand and work with code.
+Always respond factually and precisely.
+When answering questions about code:
+1. Be specific and reference examples when possible
+2. Explain technical concepts clearly
+3. Suggest best practices when appropriate
+4. If you're unsure, say so rather than guessing"""
+
+REPO_CONTEXT_PROMPT = """Current repository context:
+Summary: {summary}
+File Tree: {tree}"""
+
 # Create cache directory if it doesn't exist
 CACHE_DIR = Path(".cache")
 CACHE_DIR.mkdir(exist_ok=True)
@@ -56,58 +70,24 @@ async def chat_completion(
     print("Payload:", payload)
 
     # Add repository context if URL is provided
+    messages = payload.get("messages", [])
+    system_message = BASE_SYSTEM_PROMPT
+    
     if "repo_url" in payload:
         try:
             # Use cached ingest
             summary, tree, content = await cached_ingest(payload["repo_url"])
-            
-            # Add repository context to messages
-            messages = payload.get("messages", [])
-            messages.insert(0, {
-                "role": "system",
-                "content": f"""You are a wise technical assistant with deep knowledge of software development.
-Your role is to help developers understand and work with code repositories.
-Always respond factually and precisely based on the repository context provided.
-When answering questions about the code:
-1. Be specific and reference actual files/functions when possible
-2. Explain technical concepts clearly
-3. Suggest best practices when appropriate
-4. If you're unsure, say so rather than guessing
-
-Current repository context:
-Summary: {summary}
-File Tree: {tree}
-"""
-            })
+            system_message += f"\n\n{REPO_CONTEXT_PROMPT.format(summary=summary, tree=tree)}"
         except Exception as e:
             print(f"Error ingesting repository: {str(e)}")
-            messages = payload.get("messages", [])
-            messages.insert(0, {
-                "role": "system",
-                "content": f"""You are a wise technical assistant with deep knowledge of software development.
-Your role is to help developers understand and work with code.
-Always respond factually and precisely.
-When answering questions about code:
-1. Be specific and reference examples when possible
-2. Explain technical concepts clearly
-3. Suggest best practices when appropriate
-4. If you're unsure, say so rather than guessing
-"""
-            })
-    else:
-        messages = payload.get("messages", [])
-        messages.insert(0, {
-            "role": "system",
-            "content": f"""You are a wise technical assistant with deep knowledge of software development.
-Your role is to help developers understand and work with code.
-Always respond factually and precisely.
-When answering questions about code:
-1. Be specific and reference examples when possible
-2. Explain technical concepts clearly
-3. Suggest best practices when appropriate
-4. If you're unsure, say so rather than guessing
-"""
-        })
+    
+    # Add personalized greeting
+    system_message += f"\n\nStart every response with the user's name, which is @{username}"
+    
+    messages.insert(0, {
+        "role": "system",
+        "content": system_message
+    })
 
     # Stream response from Copilot API
     async def generate():
