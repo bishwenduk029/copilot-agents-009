@@ -82,7 +82,15 @@ async def chat_completion(
                 "tree": tree
             }, expire=3600)  # 1 hour cache
             
-            system_message += f"\n\n{REPO_CONTEXT_PROMPT.format(summary=summary, tree=tree)}"
+            # Create a specific acknowledgment message for the LLM
+            ack_message = f"\n\nRepository {url} is now ready for Q&A.\n{REPO_CONTEXT_PROMPT.format(summary=summary, tree=tree)}"
+            system_message += ack_message
+            
+            # Add an assistant message acknowledging the repo is ready
+            messages.append({
+                "role": "assistant",
+                "content": f"Repository {url} is now ready for Q&A.\n\nRepository Summary:\n{summary}\n\nFile Tree:\n{tree}"
+            })
         except Exception as e:
             print(f"Error setting repository URL: {str(e)}")
             messages.append({
