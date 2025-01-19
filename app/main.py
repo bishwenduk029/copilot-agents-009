@@ -18,7 +18,8 @@ When answering questions about code:
 
 REPO_CONTEXT_PROMPT = """Current repository context:
 Summary: {summary}
-File Tree: {tree}"""
+File Tree: {tree}
+Repository Content: {content}"""
 
 # Create cache directory if it doesn't exist
 CACHE_DIR = Path(".cache")
@@ -89,7 +90,7 @@ async def chat_completion(
             # Add an assistant message acknowledging the repo is ready
             messages.append({
                 "role": "assistant",
-                "content": f"Repository {url} is now ready for Q&A.\n\nRepository Summary:\n{summary}\n\nFile Tree:\n{tree}"
+                "content": f"Repository {url} is now ready for Q&A.\n\nRepository Summary:\n{summary}\n\nFile Tree:\n{tree}\n\nRepository Content:\n{content}"
             })
         except Exception as e:
             print(f"Error setting repository URL: {str(e)}")
@@ -100,7 +101,7 @@ async def chat_completion(
     elif thread_id and thread_id in thread_cache:
         # Use cached repo context for this thread
         repo_data = thread_cache[thread_id]
-        system_message += f"\n\n{REPO_CONTEXT_PROMPT.format(summary=repo_data['summary'], tree=repo_data['tree'])}"
+        system_message += f"\n\n{REPO_CONTEXT_PROMPT.format(summary=repo_data['summary'], tree=repo_data['tree'], content=repo_data['content'])}"
     
     print(f"Messages: {system_message}")
     
