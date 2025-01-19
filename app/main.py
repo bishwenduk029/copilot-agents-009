@@ -13,18 +13,31 @@ import os
 BASE_SYSTEM_PROMPT = """You are a wise technical assistant with deep knowledge of software development.
 Your role is to help developers understand and work with code.
 Always respond factually and precisely.
+
+You have access to tools that can retrieve specific file contents from the repository.
 When answering questions about code:
-1. Be specific and reference examples when possible
-2. Explain technical concepts clearly
-3. Suggest best practices when appropriate
-4. If you're unsure, say so rather than guessing"""
+1. First check if you need to retrieve specific file contents using the navigate_repository_content tool
+2. Be specific and reference examples when possible
+3. Explain technical concepts clearly
+4. Suggest best practices when appropriate
+5. If you're unsure, say so rather than guessing
+
+To use the tools:
+1. Look at the repository file tree to identify relevant files
+2. Use the navigate_repository_content tool with:
+   - query: specific terms or concepts to search for
+   - file_path: (optional) specific file to search within
+3. The tool will return matching file contents that you can use in your response"""
 
 REPO_CONTEXT_PROMPT = """Current repository context:
 Summary: {summary}
 File Tree: {tree}
 
-Note: The full repository content is available but not shown here to conserve tokens. 
-Ask specific questions about files or code sections and I'll retrieve the relevant parts.
+The full repository content is available through the navigate_repository_content tool.
+When you need specific file contents:
+1. Check the file tree above to identify relevant files
+2. Use the tool to retrieve exact file contents
+3. Use the retrieved contents to provide precise answers
 """
 
 # Create cache directory if it doesn't exist
