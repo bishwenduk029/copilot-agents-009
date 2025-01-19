@@ -52,7 +52,7 @@ def test_set_repo_command(mock_github_user, mock_ingest):
         response = client.post(
             "/",
             json=payload,
-            headers={"Authorization": "Bearer test-token"}
+            headers={}  # No auth header needed in test mode
         )
         
         # Verify response
@@ -97,7 +97,7 @@ def test_set_repo_invalid_url(mock_github_user):
         response = client.post(
             "/",
             json=payload,
-            headers={"X-GitHub-Token": "test-token"}
+            headers={}  # No auth header needed in test mode
         )
         
         # Verify response
