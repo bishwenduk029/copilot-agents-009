@@ -85,7 +85,7 @@ async def chat_completion(
             }, expire=3600)  # 1 hour cache
             
             # Create a specific acknowledgment message for the LLM
-            ack_message = f"\n\nRepository {url} is now ready for Q&A.\n{REPO_CONTEXT_PROMPT.format(summary=summary, tree=tree)}"
+            ack_message = f"\n\nRepository {url} is now ready for Q&A.\n{REPO_CONTEXT_PROMPT.format(summary=summary, tree=tree, content=content)}"
             system_message += ack_message
             
             # Add an assistant message acknowledging the repo is ready
