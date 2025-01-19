@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.responses import StreamingResponse
 import httpx
+from typing import List, Dict, Any
+from pydantic import BaseModel
 from gitingest import ingest
 from diskcache import Cache
 from pathlib import Path
@@ -161,8 +163,13 @@ async def chat_completion(
             "status": "success"
         }
     
+    # Define available tools
+    tools = [get_repo_navigation_tool()]
+
     # In production mode, stream response from Copilot API
     async def generate():
+        # Add tools to the request if this is the first iteration
+        use_tools = True
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 async with client.stream(
@@ -198,6 +205,53 @@ async def chat_completion(
             "X-Streaming-Status": "active"
         }
     )
+
+class FunctionTool(BaseModel):
+    type: str = "function"
+    function: Dict[str, Any]
+
+class FunctionCall(BaseModel):
+    name: str
+    arguments: str
+
+class ToolCall(BaseModel):
+    id: str
+    type: str
+    function: FunctionCall
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+    tool_calls: List[ToolCall] = []
+
+# Define the repository navigation tool
+def get_repo_navigation_tool() -> FunctionTool:
+    return FunctionTool(
+        type="function",
+        function={
+            "name": "navigate_repository_content",
+            "description": "Navigate the ingested repository content to find specific information. Use this tool when asked deep technical questions about the codebase.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The specific information being searched for in the repository"
+                    },
+                    "file_path": {
+                        "type": "string",
+                        "description": "Optional specific file path to search within"
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    )
+
+# Placeholder for the tool implementation
+async def execute_repo_navigation_tool(function_call: FunctionCall) -> str:
+    """Execute the repository navigation tool (implementation to be added later)"""
+    return "Repository navigation tool response"
 
 @app.on_event("shutdown")
 async def shutdown():
