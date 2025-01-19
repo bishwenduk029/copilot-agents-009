@@ -280,11 +280,21 @@ async def chat_completion(
             
             # Make initial API request
             async for chunk in make_api_request(client, messages, use_tools):
-                chunk_str = chunk.decode('utf-8')
+                chunk_str = chunk.decode('utf-8').strip()
+                
+                # Skip empty chunks and [DONE] messages
+                if not chunk_str or chunk_str == "data: [DONE]":
+                    continue
+                    
+                # Remove "data: " prefix if present
+                if chunk_str.startswith("data: "):
+                    chunk_str = chunk_str[6:]
+                    
                 print(f"\n=== Raw Chunk ===")
                 print(chunk_str)
                 
                 try:
+                    # Parse the JSON data
                     data = json.loads(chunk_str)
                     print(f"\n=== Parsed Data ===")
                     print(json.dumps(data, indent=2))
@@ -329,6 +339,11 @@ async def chat_completion(
                     print(f"\n=== JSON Decode Error ===")
                     print(f"Error: {str(e)}")
                     print(f"Chunk: {chunk_str}")
+                    # Try to recover partial JSON if possible
+                    if chunk_str.count('{') > chunk_str.count('}'):
+                        # Incomplete JSON - wait for next chunk
+                        continue
+                    # Otherwise skip this chunk
                     continue
                     
             # If we got tool calls, process them
