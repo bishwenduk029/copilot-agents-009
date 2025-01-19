@@ -281,17 +281,28 @@ async def chat_completion(
             # Make initial API request
             async for chunk in make_api_request(client, messages, use_tools):
                 chunk_str = chunk.decode('utf-8')
+                print(f"\n=== Raw Chunk ===")
+                print(chunk_str)
                 
                 try:
                     data = json.loads(chunk_str)
+                    print(f"\n=== Parsed Data ===")
+                    print(json.dumps(data, indent=2))
+                    
                     if data.get("choices"):
                         choice = data["choices"][0]
+                        print(f"\n=== Choice Data ===")
+                        print(json.dumps(choice, indent=2))
+                        
                         if choice.get("delta", {}).get("tool_calls"):
-                            # Process tool call chunks
+                            print("\n=== Found Tool Calls ===")
                             for tool_call in choice["delta"]["tool_calls"]:
+                                print(f"\n=== Tool Call Chunk ===")
+                                print(json.dumps(tool_call, indent=2))
+                                
                                 if tool_call.get("index") == 0:
                                     if not current_tool_call:
-                                        # Start new tool call
+                                        print("\n=== Starting New Tool Call ===")
                                         current_tool_call = {
                                             "id": tool_call.get("id"),
                                             "type": tool_call.get("type"),
@@ -300,21 +311,37 @@ async def chat_completion(
                                                 "arguments": tool_call["function"].get("arguments", "")
                                             }
                                         }
+                                        print(f"New tool call: {current_tool_call}")
                                     else:
-                                        # Append to existing tool call
+                                        print("\n=== Appending to Tool Call ===")
                                         current_tool_call["function"]["arguments"] += tool_call["function"].get("arguments", "")
+                                        print(f"Updated arguments: {current_tool_call['function']['arguments']}")
                                         
                                     # If we have a complete tool call
                                     if data.get("finish_reason") == "tool_calls":
+                                        print("\n=== Complete Tool Call ===")
                                         tool_calls.append(current_tool_call)
+                                        print(f"Final tool call: {current_tool_call}")
                                         current_tool_call = None
                                         got_tool_call = True
                                         
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
+                    print(f"\n=== JSON Decode Error ===")
+                    print(f"Error: {str(e)}")
+                    print(f"Chunk: {chunk_str}")
                     continue
                     
             # If we got tool calls, process them
             if got_tool_call and tool_calls:
+                print("\n=== Processing Tool Calls ===")
+                print(f"Tool calls to process: {len(tool_calls)}")
+                for i, tool_call in enumerate(tool_calls):
+                    print(f"\nTool Call {i+1}:")
+                    print(f"ID: {tool_call['id']}")
+                    print(f"Type: {tool_call['type']}")
+                    print(f"Function: {tool_call['function']['name']}")
+                    print(f"Arguments: {tool_call['function']['arguments']}")
+                
                 tool_messages = await process_tool_calls(tool_calls)
                 messages.extend(tool_messages)
                 
@@ -323,6 +350,11 @@ async def chat_completion(
                 if current_iteration >= max_iterations - 1:
                     use_tools = False
                     print("Final iteration - disabling tools")
+            else:
+                print("\n=== No Tool Calls Processed ===")
+                print(f"Got tool call: {got_tool_call}")
+                print(f"Tool calls count: {len(tool_calls)}")
+                print(f"Current iteration: {current_iteration}")
             
             return messages
 
