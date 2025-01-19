@@ -252,7 +252,10 @@ async def chat_completion(
                     "Content-Type": "application/json",
                     "Accept": "application/json"
                 },
-                json=request_data
+                json={
+                    **request_data,
+                    "model": "gpt-4"
+                }
             ) as response:
                 if response.status_code != 200:
                     error_body = await response.aread()
@@ -327,13 +330,17 @@ async def chat_completion(
                                         current_tool_call["function"]["arguments"] += tool_call["function"].get("arguments", "")
                                         print(f"Updated arguments: {current_tool_call['function']['arguments']}")
                                         
-                                    # If we have a complete tool call
-                                    if data.get("finish_reason") == "tool_calls":
+                                    # Check if we have a complete tool call
+                                    if choice.get("finish_reason") == "tool_calls":
                                         print("\n=== Complete Tool Call ===")
-                                        tool_calls.append(current_tool_call)
-                                        print(f"Final tool call: {current_tool_call}")
-                                        current_tool_call = None
-                                        got_tool_call = True
+                                        if current_tool_call:
+                                            # Finalize the tool call
+                                            tool_calls.append(current_tool_call)
+                                            print(f"Final tool call: {current_tool_call}")
+                                            current_tool_call = None
+                                            got_tool_call = True
+                                        else:
+                                            print("Warning: Got finish_reason but no current tool call")
                                         
                 except json.JSONDecodeError as e:
                     print(f"\n=== JSON Decode Error ===")
