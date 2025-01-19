@@ -163,8 +163,8 @@ async def chat_completion(
             "status": "success"
         }
     
-    # Define available tools
-    tools = [get_repo_navigation_tool()]
+    # Define available tools with thread context
+    tools = [get_repo_navigation_tool(thread_id)] if thread_id else []
 
     # In production mode, stream response from Copilot API
     async def generate():
@@ -225,11 +225,11 @@ class ChatMessage(BaseModel):
     tool_calls: List[ToolCall] = []
 
 # Define the repository navigation tool
-def get_repo_navigation_tool() -> FunctionTool:
+def get_repo_navigation_tool(thread_id: str) -> FunctionTool:
     return FunctionTool(
         type="function",
         function={
-            "name": "navigate_repository_content",
+            "name": f"navigate_repository_content:{thread_id}",
             "description": "Navigate the ingested repository content to find specific information. Use this tool when asked deep technical questions about the codebase.",
             "parameters": {
                 "type": "object",
@@ -248,10 +248,80 @@ def get_repo_navigation_tool() -> FunctionTool:
         }
     )
 
-# Placeholder for the tool implementation
 async def execute_repo_navigation_tool(function_call: FunctionCall) -> str:
-    """Execute the repository navigation tool (implementation to be added later)"""
-    return "Repository navigation tool response"
+    """Execute the repository navigation tool to search repository content"""
+    from typing import Optional
+    import json
+    
+    try:
+        # Parse the function arguments
+        args = json.loads(function_call.arguments)
+        query = args.get("query", "").lower()
+        file_path = args.get("file_path")
+        
+        # Get the cached repo data for this thread
+        thread_id = function_call.name.split(":")[-1] if ":" in function_call.name else None
+        if not thread_id or thread_id not in thread_cache:
+            return "Error: No repository context available"
+            
+        repo_data = thread_cache[thread_id]
+        content = repo_data.get("content", "")
+        
+        # Parse the content digest
+        files = []
+        current_file = None
+        
+        for line in content.splitlines():
+            if line.startswith("===") and "File:" in line:
+                # Start new file section
+                if current_file:
+                    files.append(current_file)
+                file_path = line.split("File:")[1].strip()
+                current_file = {
+                    "path": file_path,
+                    "content": ""
+                }
+            elif current_file:
+                current_file["content"] += line + "\n"
+        
+        if current_file:
+            files.append(current_file)
+            
+        # Search logic
+        results = []
+        
+        for file in files:
+            # Skip if specific file path was requested and doesn't match
+            if file_path and file["path"].lower() != file_path.lower():
+                continue
+                
+            # Check if query matches file path or content
+            if query in file["path"].lower() or query in file["content"].lower():
+                # Include first 200 chars and last 200 chars of content
+                content_preview = file["content"][:200] + "..." + file["content"][-200:]
+                results.append({
+                    "file": file["path"],
+                    "content_preview": content_preview.strip()
+                })
+                
+                # Limit to 5 results to avoid overwhelming the LLM
+                if len(results) >= 5:
+                    break
+                    
+        if not results:
+            return "No matching files found"
+            
+        # Format results for LLM
+        response = "Found matching files:\n"
+        for result in results:
+            response += f"\nFile: {result['file']}\n"
+            response += f"Preview: {result['content_preview']}\n"
+            response += "---\n"
+            
+        return response
+        
+    except Exception as e:
+        return f"Error executing repository navigation: {str(e)}"
 
 @app.on_event("shutdown")
 async def shutdown():
