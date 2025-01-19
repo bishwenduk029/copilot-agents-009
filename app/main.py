@@ -259,22 +259,48 @@ async def chat_completion(
                     async for chunk in response.aiter_bytes():
                         # Check if the chunk contains tool calls
                         chunk_str = chunk.decode('utf-8')
-                        if '"tool_calls":' in chunk_str:
-                            # Parse the tool calls and process them
-                            try:
-                                import json
-                                data = json.loads(chunk_str)
-                                if data.get("choices") and data["choices"][0].get("message", {}).get("tool_calls"):
-                                    tool_calls = data["choices"][0]["message"]["tool_calls"]
-                                    tool_messages = await process_tool_calls(tool_calls)
-                                    # Add tool responses to messages and make a new request
-                                    messages.extend(tool_messages)
-                                    # Update request data with new messages
-                                    request_data["messages"] = messages
-                                    # Continue streaming with updated messages
-                                    continue
-                            except Exception as e:
-                                print(f"Error processing tool calls: {str(e)}")
+                        
+                        # Handle potential partial JSON chunks
+                        try:
+                            # Try to parse the complete JSON object
+                            data = json.loads(chunk_str)
+                            
+                            # Check if this is a tool call response
+                            if data.get("choices") and data["choices"][0].get("delta", {}).get("tool_calls"):
+                                # Accumulate tool call chunks
+                                tool_calls = data["choices"][0]["delta"]["tool_calls"]
+                                
+                                # Wait for the complete tool call message
+                                async for next_chunk in response.aiter_bytes():
+                                    next_str = next_chunk.decode('utf-8')
+                                    if next_str.strip() == "[DONE]":
+                                        break
+                                    
+                                    try:
+                                        next_data = json.loads(next_str)
+                                        if next_data.get("choices"):
+                                            # Append to existing tool calls
+                                            for tc in next_data["choices"][0]["delta"].get("tool_calls", []):
+                                                if tc.get("index") is not None:
+                                                    if len(tool_calls) <= tc["index"]:
+                                                        tool_calls.append(tc)
+                                                    else:
+                                                        tool_calls[tc["index"]].update(tc)
+                                    except json.JSONDecodeError:
+                                        continue
+                                
+                                # Process the complete tool calls
+                                tool_messages = await process_tool_calls(tool_calls)
+                                messages.extend(tool_messages)
+                                request_data["messages"] = messages
+                                continue
+                                
+                        except json.JSONDecodeError as e:
+                            # Skip partial JSON chunks
+                            continue
+                        except Exception as e:
+                            print(f"Error processing tool calls: {str(e)}")
+                            continue
                         
                         yield chunk
         except Exception as e:
