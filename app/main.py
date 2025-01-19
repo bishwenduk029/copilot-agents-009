@@ -212,132 +212,92 @@ async def chat_completion(
         return messages
 
     async def generate():
-        # Track tool call iterations
         max_iterations = 3
         current_iteration = 0
         use_tools = bool(tools)
         
+        async def make_api_request(client, messages, use_tools):
+            """Make API request and handle response"""
+            request_data = {
+                "messages": messages,
+                "stream": True,
+                "tools": tools if use_tools else None,
+                "tool_choice": "auto" if use_tools else None
+            }
+            
+            async with client.stream(
+                "POST", 
+                "https://api.githubcopilot.com/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {x_github_token}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                },
+                json=request_data
+            ) as response:
+                if response.status_code != 200:
+                    error_body = await response.aread()
+                    print("\n=== API Error Details ===")
+                    print(f"Status Code: {response.status_code}")
+                    print("Response Headers:", dict(response.headers))
+                    print("Response Body:", error_body)
+                    print("=======================\n")
+                    yield b'{"error": "API request failed"}'
+                    return
+                
+                async for chunk in response.aiter_bytes():
+                    chunk_str = chunk.decode('utf-8')
+                    if not any(tc in chunk_str for tc in ['"tool_calls"', '"delta"']):
+                        yield chunk
+                    else:
+                        pass
+
+        async def handle_tool_calls(client, messages):
+            """Handle tool calls and return updated messages"""
+            nonlocal current_iteration, use_tools
+            
+            print(f"\n=== Tool Call Iteration {current_iteration + 1} ===")
+            
+            # Make initial API request
+            async for chunk in make_api_request(client, messages, use_tools):
+                chunk_str = chunk.decode('utf-8')
+                
+                try:
+                    data = json.loads(chunk_str)
+                    if data.get("choices") and data["choices"][0].get("delta", {}).get("tool_calls"):
+                        # Process tool calls
+                        tool_calls = data["choices"][0]["delta"]["tool_calls"]
+                        tool_messages = await process_tool_calls(tool_calls)
+                        messages.extend(tool_messages)
+                        
+                        # Update iteration state
+                        current_iteration += 1
+                        if current_iteration >= max_iterations - 1:
+                            use_tools = False
+                            print("Final iteration - disabling tools")
+                            
+                        return messages
+                except json.JSONDecodeError:
+                    continue
+                    
+            return messages
+
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 while current_iteration < max_iterations:
-                    print(f"\n=== Tool Call Iteration {current_iteration + 1} ===")
-                    
-                    request_data = {
-                        "messages": messages,
-                        "stream": True,
-                        "tools": tools if use_tools else None,
-                        "tool_choice": "auto" if use_tools else None
-                    }
-                    
-                    # Make the API request
-                    async with client.stream(
-                        "POST", 
-                        "https://api.githubcopilot.com/chat/completions",
-                        headers={
-                            "Authorization": f"Bearer {x_github_token}",
-                            "Content-Type": "application/json",
-                            "Accept": "application/json"
-                        },
-                        json=request_data
-                    ) as response:
-                        if response.status_code != 200:
-                            error_body = await response.aread()
-                            print("\n=== API Error Details ===")
-                            print(f"Status Code: {response.status_code}")
-                            print("Response Headers:", dict(response.headers))
-                            print("Response Body:", error_body)
-                            print("=======================\n")
-                            yield b'{"error": "API request failed"}'
-                            return
-                        
-                        # Track if we got a tool call
-                        got_tool_call = False
-                        
-                        async for chunk in response.aiter_bytes():
-                            # Check if the chunk contains tool calls
-                            chunk_str = chunk.decode('utf-8')
-                            
-                            # Handle potential partial JSON chunks
-                            try:
-                                # Try to parse the complete JSON object
-                                data = json.loads(chunk_str)
-                                
-                                # Check if this is a tool call response
-                                if data.get("choices") and data["choices"][0].get("delta", {}).get("tool_calls"):
-                                    got_tool_call = True
-                                    # Accumulate tool call chunks
-                                    tool_calls = data["choices"][0]["delta"]["tool_calls"]
-                                    
-                                    # Wait for the complete tool call message
-                                    async for next_chunk in response.aiter_bytes():
-                                        next_str = next_chunk.decode('utf-8')
-                                        if next_str.strip() == "[DONE]":
-                                            break
-                                        
-                                        try:
-                                            next_data = json.loads(next_str)
-                                            if next_data.get("choices"):
-                                                # Append to existing tool calls
-                                                for tc in next_data["choices"][0]["delta"].get("tool_calls", []):
-                                                    if tc.get("index") is not None:
-                                                        if len(tool_calls) <= tc["index"]:
-                                                            tool_calls.append(tc)
-                                                        else:
-                                                            tool_calls[tc["index"]].update(tc)
-                                        except json.JSONDecodeError:
-                                            continue
-                                    
-                                    # Process the complete tool calls
-                                    tool_messages = await process_tool_calls(tool_calls)
-                                    
-                                    messages.extend(tool_messages)
-                                    request_data["messages"] = messages
-                                    
-                                    # Increment iteration counter
-                                    current_iteration += 1
-                                    
-                                    # On last iteration, disable tools to get final response
-                                    if current_iteration >= max_iterations - 1:
-                                        use_tools = False
-                                        print("Final iteration - disabling tools")
-                                    
-                                    break
-                                    
-                            except json.JSONDecodeError as e:
-                                # Skip partial JSON chunks
-                                continue
-                            except Exception as e:
-                                print(f"Error processing tool calls: {str(e)}")
-                                continue
-                            
-                            # Only yield chunks that aren't tool calls
-                            if not any(tc in chunk_str for tc in ['"tool_calls"', '"delta"']):
+                    # Handle tool calls if needed
+                    if use_tools:
+                        messages = await handle_tool_calls(client, messages)
+                        if not use_tools:
+                            # Make final request without tools
+                            async for chunk in make_api_request(client, messages, False):
                                 yield chunk
-                            else:
-                                pass
-                        
-                        # If we got a tool call, process it and continue to next iteration
-                        if got_tool_call:
-                            # Increment iteration counter
-                            current_iteration += 1
-                        
-                            # On last iteration, disable tools to get final response
-                            if current_iteration >= max_iterations - 1:
-                                use_tools = False
-                                print("Final iteration - disabling tools")
-                        
-                            # Break to process tool results
-                            break
-                    
-                    # If we're not using tools anymore, make final response
-                    if not use_tools:
-                        # Make final API request without tools
-                        request_data = {
-                            "messages": messages,
-                            "stream": True,
-                            "tools": None,
-                            "tool_choice": None
-                        }
+                            return
+                    else:
+                        # Make final request without tools
+                        async for chunk in make_api_request(client, messages, False):
+                            yield chunk
+                        return
                         
                         
                         async with client.stream(
