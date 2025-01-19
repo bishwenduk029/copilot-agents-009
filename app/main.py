@@ -254,7 +254,7 @@ async def chat_completion(
                 },
                 json={
                     **request_data,
-                    "model": "gpt-4"
+                    "model": "gpt-4o"
                 }
             ) as response:
                 if response.status_code != 200:
