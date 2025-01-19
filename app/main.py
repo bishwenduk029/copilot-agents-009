@@ -223,8 +223,18 @@ async def chat_completion(
                     # Set tool_choice to none initially, let the model decide
                     request_data["tool_choice"] = "auto"
                 
-                # Debug print the request data
-                print("Request data:", request_data)
+                # Detailed debug logging
+                print("\n=== API Request Details ===")
+                print("Request URL: https://api.githubcopilot.com/chat/completions")
+                print("Headers:", {
+                    "Authorization": f"Bearer {x_github_token[:10]}...",  # Truncate token for security
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                })
+                print("Request Body:")
+                import json
+                print(json.dumps(request_data, indent=2))
+                print("=======================\n")
                 
                 async with client.stream(
                     "POST", 
@@ -238,7 +248,11 @@ async def chat_completion(
                 ) as response:
                     if response.status_code != 200:
                         error_body = await response.aread()
-                        print(f"API error response: {error_body}")
+                        print("\n=== API Error Details ===")
+                        print(f"Status Code: {response.status_code}")
+                        print("Response Headers:", dict(response.headers))
+                        print("Response Body:", error_body)
+                        print("=======================\n")
                         yield b'{"error": "API request failed"}'
                         return
                     
