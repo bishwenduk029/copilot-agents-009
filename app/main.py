@@ -232,6 +232,101 @@ async def chat_completion(
                     }
                     
                     print("Request data:", json.dumps(request_data, indent=2))
+                    
+                    # Make the API request
+                    async with client.stream(
+                        "POST", 
+                        "https://api.githubcopilot.com/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {x_github_token}",
+                            "Content-Type": "application/json",
+                            "Accept": "application/json"
+                        },
+                        json=request_data
+                    ) as response:
+                        if response.status_code != 200:
+                            error_body = await response.aread()
+                            print("\n=== API Error Details ===")
+                            print(f"Status Code: {response.status_code}")
+                            print("Response Headers:", dict(response.headers))
+                            print("Response Body:", error_body)
+                            print("=======================\n")
+                            yield b'{"error": "API request failed"}'
+                            return
+                        
+                        # Track if we got a tool call
+                        got_tool_call = False
+                        
+                        async for chunk in response.aiter_bytes():
+                            # Check if the chunk contains tool calls
+                            chunk_str = chunk.decode('utf-8')
+                            
+                            # Handle potential partial JSON chunks
+                            try:
+                                # Try to parse the complete JSON object
+                                data = json.loads(chunk_str)
+                                
+                                # Check if this is a tool call response
+                                if data.get("choices") and data["choices"][0].get("delta", {}).get("tool_calls"):
+                                    got_tool_call = True
+                                    # Accumulate tool call chunks
+                                    tool_calls = data["choices"][0]["delta"]["tool_calls"]
+                                    
+                                    # Wait for the complete tool call message
+                                    async for next_chunk in response.aiter_bytes():
+                                        next_str = next_chunk.decode('utf-8')
+                                        if next_str.strip() == "[DONE]":
+                                            break
+                                        
+                                        try:
+                                            next_data = json.loads(next_str)
+                                            if next_data.get("choices"):
+                                                # Append to existing tool calls
+                                                for tc in next_data["choices"][0]["delta"].get("tool_calls", []):
+                                                    if tc.get("index") is not None:
+                                                        if len(tool_calls) <= tc["index"]:
+                                                            tool_calls.append(tc)
+                                                        else:
+                                                            tool_calls[tc["index"]].update(tc)
+                                        except json.JSONDecodeError:
+                                            continue
+                                    
+                                    # Process the complete tool calls
+                                    print("\nProcessing tool calls...")
+                                    print("Tool calls received:", json.dumps(tool_calls, indent=2))
+                                    
+                                    tool_messages = await process_tool_calls(tool_calls)
+                                    print("Tool messages generated:", json.dumps(tool_messages, indent=2))
+                                    
+                                    messages.extend(tool_messages)
+                                    request_data["messages"] = messages
+                                    
+                                    # Increment iteration counter
+                                    current_iteration += 1
+                                    
+                                    # On last iteration, disable tools to get final response
+                                    if current_iteration >= max_iterations - 1:
+                                        use_tools = False
+                                        print("Final iteration - disabling tools")
+                                    
+                                    break
+                                    
+                            except json.JSONDecodeError as e:
+                                # Skip partial JSON chunks
+                                continue
+                            except Exception as e:
+                                print(f"Error processing tool calls: {str(e)}")
+                                continue
+                            
+                            # Only yield chunks that aren't tool calls
+                            if not any(tc in chunk_str for tc in ['"tool_calls"', '"delta"']):
+                                yield chunk
+                            else:
+                                print("Skipping tool call chunk from final output")
+                        
+                        # If we didn't get a tool call, break the loop
+                        if not got_tool_call:
+                            break
                 
                 async with client.stream(
                     "POST", 
