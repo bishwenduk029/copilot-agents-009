@@ -193,13 +193,16 @@ async def chat_completion(
         """Process tool calls and return assistant messages with results"""
         messages = []
         for tool_call in tool_calls:
-            if tool_call.function.name.startswith("navigate_repository_content"):
-                result = await execute_repo_navigation_tool(tool_call.function)
-                messages.append(ChatMessage(
-                    role="tool",
-                    content=result,
-                    tool_call_id=tool_call.id
+            if tool_call["function"]["name"].startswith("navigate_repository_content"):
+                result = await execute_repo_navigation_tool(FunctionCall(
+                    name=tool_call["function"]["name"],
+                    arguments=tool_call["function"]["arguments"]
                 ))
+                messages.append({
+                    "role": "tool",
+                    "content": result,
+                    "tool_call_id": tool_call["id"]
+                })
         return messages
 
     async def generate():
