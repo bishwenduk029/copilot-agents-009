@@ -221,8 +221,6 @@ async def chat_completion(
             async with httpx.AsyncClient(timeout=30.0) as client:
                 while current_iteration < max_iterations:
                     print(f"\n=== Tool Call Iteration {current_iteration + 1} ===")
-                    print(f"Using tools: {use_tools}")
-                    print(f"Messages count: {len(messages)}")
                     
                     request_data = {
                         "messages": messages,
@@ -230,8 +228,6 @@ async def chat_completion(
                         "tools": tools if use_tools else None,
                         "tool_choice": "auto" if use_tools else None
                     }
-                    
-                    print("Request data:", json.dumps(request_data, indent=2))
                     
                     # Make the API request
                     async with client.stream(
@@ -292,11 +288,7 @@ async def chat_completion(
                                             continue
                                     
                                     # Process the complete tool calls
-                                    print("\nProcessing tool calls...")
-                                    print("Tool calls received:", json.dumps(tool_calls, indent=2))
-                                    
                                     tool_messages = await process_tool_calls(tool_calls)
-                                    print("Tool messages generated:", json.dumps(tool_messages, indent=2))
                                     
                                     messages.extend(tool_messages)
                                     request_data["messages"] = messages
@@ -322,7 +314,7 @@ async def chat_completion(
                             if not any(tc in chunk_str for tc in ['"tool_calls"', '"delta"']):
                                 yield chunk
                             else:
-                                print("Skipping tool call chunk from final output")
+                                pass
                         
                         # If we got a tool call, process it and continue to next iteration
                         if got_tool_call:
@@ -347,8 +339,6 @@ async def chat_completion(
                             "tool_choice": None
                         }
                         
-                        print("\n=== Final Request ===")
-                        print("Request data:", json.dumps(request_data, indent=2))
                         
                         async with client.stream(
                             "POST", 
@@ -370,13 +360,12 @@ async def chat_completion(
                                 yield b'{"error": "API request failed"}'
                                 return
                             
-                            print("\n=== Final Response ===")
                             async for chunk in response.aiter_bytes():
                                 chunk_str = chunk.decode('utf-8')
                                 if not any(tc in chunk_str for tc in ['"tool_calls"', '"delta"']):
                                     yield chunk
                                 else:
-                                    print("Skipping tool call chunk from final output")
+                                    pass
                             return
         except Exception as e:
             print(f"Streaming error: {str(e)}")
