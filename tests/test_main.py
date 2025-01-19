@@ -30,6 +30,10 @@ def mock_ingest():
         yield mock_ingest
 
 def test_set_repo_command(mock_github_user, mock_ingest):
+    # Clear cache before test
+    from app.main import cache
+    cache.clear()
+    
     # Mock GitHub API response
     with patch("httpx.AsyncClient.get") as mock_get:
         mock_get.return_value = MagicMock(
