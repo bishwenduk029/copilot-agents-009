@@ -166,11 +166,11 @@ async def chat_completion(
     # Define available tools with thread context
     tools = []
     if thread_id:
-        tools.append({
+        tools = [{
             "type": "function",
             "function": {
-                "name": f"navigate_repository_content:{thread_id}",
-                "description": "Navigate the ingested repository content to find specific information. Use this tool when asked deep technical questions about the codebase.",
+                "name": "navigate_repository_content",
+                "description": "Search the repository content for specific information. Use this when asked technical questions about the codebase.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -179,14 +179,14 @@ async def chat_completion(
                             "description": "The specific information being searched for in the repository"
                         },
                         "file_path": {
-                            "type": "string",
+                            "type": "string", 
                             "description": "Optional specific file path to search within"
                         }
                     },
                     "required": ["query"]
                 }
             }
-        })
+        }]
 
     # In production mode, stream response from Copilot API
     async def process_tool_calls(tool_calls: List[Dict]) -> List[Dict]:
@@ -194,10 +194,14 @@ async def chat_completion(
         messages = []
         for tool_call in tool_calls:
             function = tool_call.get("function", {})
-            if function.get("name", "").startswith("navigate_repository_content"):
+            if function.get("name") == "navigate_repository_content":
+                # Add thread ID to arguments
+                args = json.loads(function.get("arguments", "{}"))
+                args["thread_id"] = thread_id
+                
                 result = await execute_repo_navigation_tool(FunctionCall(
                     name=function.get("name", ""),
-                    arguments=function.get("arguments", "{}")
+                    arguments=json.dumps(args)
                 ))
                 messages.append({
                     "role": "tool",
@@ -213,7 +217,9 @@ async def chat_completion(
             async with httpx.AsyncClient(timeout=30.0) as client:
                 request_data = {
                     "messages": messages,
-                    "stream": True
+                    "stream": True,
+                    "tools": tools if tools else None,
+                    "tool_choice": "auto" if tools else None
                 }
                 
                 # Detailed debug logging
