@@ -189,12 +189,15 @@ async def chat_completion(
     async def generate():
         max_iterations = 3
         current_iteration = 0
-        # Disable tools for /set command responses
-        use_tools = bool(tools) and not any(
-            msg["content"].startswith("/set") 
-            for msg in messages 
-            if msg["role"] == "user"
-        )
+        # Disable tools only if last user message is /set command
+        use_tools = bool(tools)
+        if messages:
+            last_user_msg = next(
+                (msg for msg in reversed(messages) if msg["role"] == "user"),
+                None
+            )
+            if last_user_msg and last_user_msg["content"].startswith("/set"):
+                use_tools = False
         # Create local copy of messages to avoid scope issues
         local_messages = messages.copy()
         
