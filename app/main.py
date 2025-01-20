@@ -62,7 +62,7 @@ def get_versioned_key(key: str) -> str:
 
 app = FastAPI()
 
-async def cached_ingest(repo_url: str, include_patterns: list[str] | None = None):
+async def cached_ingest(repo_url: str):
     # Check cache first with versioned key
     cache_key = get_versioned_key(repo_url)
     cached_data = cache.get(cache_key)
@@ -80,7 +80,7 @@ async def cached_ingest(repo_url: str, include_patterns: list[str] | None = None
     from concurrent.futures import ThreadPoolExecutor
     
     def sync_ingest():
-        return ingest(repo_url, include_patterns=include_patterns)
+        return ingest(repo_url)
     
     with ThreadPoolExecutor() as pool:
         result = await asyncio.get_event_loop().run_in_executor(pool, sync_ingest)
@@ -124,10 +124,7 @@ async def chat_completion(
             # Ingest and cache the repo data
             try:
                 # Only include code files by default
-                result = await cached_ingest(
-                    url,
-                    include_patterns=["*.py", "*.kt", "*.kts", "*.java", "*.gradle", "*.md", "*.json", "*.yaml", "*.yml", "*.ts"]
-                )
+                result = await cached_ingest(url)
                 summary = result[0]
                 tree = result[1]
                 content = result[2]
