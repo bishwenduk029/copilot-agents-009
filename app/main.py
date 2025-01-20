@@ -276,9 +276,19 @@ async def chat_completion(
                     # Accumulate chunks for logging
                     tool_response += chunk
                     
-                    # Accumulate raw bytes and decode as UTF-8
+                    # Accumulate raw bytes
                     tool_response += chunk
-                    chunk_str = chunk.decode('utf-8')
+                    
+                    # Decode as UTF-8, handling partial sequences
+                    try:
+                        chunk_str = chunk.decode('utf-8')
+                    except UnicodeDecodeError:
+                        # If we have a partial UTF-8 sequence, wait for next chunk
+                        continue
+                    
+                    # Buffer for partial JSON data
+                    if not hasattr(handle_tool_calls, 'json_buffer'):
+                        handle_tool_calls.json_buffer = ""
                     
                     # Process each line separately
                     for line in chunk_str.splitlines():
@@ -291,9 +301,15 @@ async def chat_completion(
                             if chunk_data == "[DONE]":
                                 continue
                                 
+                            # Add to JSON buffer
+                            handle_tool_calls.json_buffer += chunk_data
+                            
                             try:
-                                # Parse the JSON data
-                                data = json.loads(chunk_data)
+                                # Try to parse the accumulated JSON
+                                data = json.loads(handle_tool_calls.json_buffer)
+                                
+                                # Clear buffer on successful parse
+                                handle_tool_calls.json_buffer = ""
                                 
                                 # Check if tool calls are detected
                                 if data.get("choices"):
@@ -313,9 +329,12 @@ async def chat_completion(
                                         print(f"Content: {delta['content']}")
                                 
                             except json.JSONDecodeError as e:
-                                print(f"\n=== Partial JSON Data ===")
-                                print(f"Error: {str(e)}")
-                                print(f"Chunk Data: {chunk_data}")
+                                # If we have a partial JSON, keep it in buffer
+                                if not isinstance(e, json.JSONDecodeError) or e.pos != len(handle_tool_calls.json_buffer):
+                                    # Only log errors that aren't just partial data
+                                    print(f"\n=== JSON Parse Error ===")
+                                    print(f"Error: {str(e)}")
+                                    print(f"Partial Data: {handle_tool_calls.json_buffer}")
                                 continue
                                 
                         # Return each line in SSE format
