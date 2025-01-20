@@ -271,6 +271,8 @@ async def chat_completion(
             
             # Make streaming API request for tool calls
             tool_response = b""
+            tool_calls_detected = False
+            
             async for chunk in make_api_request(client, messages, use_tools, stream=True):
                 try:
                     # Accumulate chunks for logging
@@ -286,13 +288,13 @@ async def chat_completion(
                         # Parse the JSON data
                         data = json.loads(chunk_data)
                         
-                        # Log tool call details as they stream in
+                        # Check if tool calls are detected
                         if data.get("choices"):
                             choice = data["choices"][0]
                             delta = choice.get("delta", {})
                             
-                            # Log tool call start
                             if delta.get("tool_calls"):
+                                tool_calls_detected = True
                                 print(f"\n=== Tool Call Started ===")
                                 for tool_call in delta["tool_calls"]:
                                     print(f"Tool Call ID: {tool_call.get('id')}")
@@ -303,17 +305,24 @@ async def chat_completion(
                             if delta.get("content"):
                                 print(f"Content: {delta['content']}")
                                 
-                    yield chunk
+                    # Return chunk in SSE format
+                    yield f"data: {chunk_str}\n\n".encode('utf-8')
                     
                 except json.JSONDecodeError as e:
                     print(f"\n=== JSON Decode Error ===")
                     print(f"Error: {str(e)}")
                     print(f"Chunk: {chunk}")
+                    yield f"data: {json.dumps({'error': str(e)})}\n\n".encode('utf-8')
                     continue
                     
             # Log complete tool call response
             print(f"\n=== Complete Tool Call Response ===")
             print(tool_response.decode('utf-8'))
+            
+            # If no tool calls were detected, mark tools as disabled
+            if not tool_calls_detected:
+                use_tools = False
+                print("No tool calls detected - disabling tools for next iteration")
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
