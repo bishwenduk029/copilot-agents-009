@@ -23,11 +23,16 @@ When answering questions about code:
 5. If you're unsure, say so rather than guessing
 
 To use the tools:
-1. Look at the repository file tree to identify relevant files
-2. Use the navigate_repository_content tool with:
-   - query: specific terms or concepts to search for
-   - file_path: (optional) specific file to search within
-3. The tool will return matching file contents that you can use in your response"""
+1. Carefully examine the repository file tree above to identify relevant files
+2. Verify the exact file path exists in the file tree before requesting it
+3. Use the navigate_repository_content tool with:
+   - file_path: exact path to the file as shown in the file tree
+4. The tool will return matching file contents that you can use in your response
+
+Important rules:
+- Always check the file tree first to confirm the file exists
+- Use the exact file path as shown in the file tree
+- Never guess file paths - if you can't find it in the tree, ask for clarification"""
 
 REPO_CONTEXT_PROMPT = """Current repository context:
 Summary: {summary}
