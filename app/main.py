@@ -269,58 +269,51 @@ async def chat_completion(
             
             print(f"\n=== Tool Call Iteration {current_iteration + 1} ===")
             
-            # Make non-streaming API request for tool calls
-            async for chunk in make_api_request(client, messages, use_tools, stream=False):
+            # Make streaming API request for tool calls
+            tool_response = b""
+            async for chunk in make_api_request(client, messages, use_tools, stream=True):
                 try:
-                    # Parse the complete response
-                    data = json.loads(chunk)
-                    print(f"\n=== Complete Response ===")
-                    print(json.dumps(data, indent=2))
+                    # Accumulate chunks for logging
+                    tool_response += chunk
                     
-                    if data.get("choices"):
-                        choice = data["choices"][0]
-                        finish_reason = choice.get("finish_reason")
+                    # Parse each chunk as it comes in
+                    chunk_str = chunk.decode('utf-8').strip()
+                    if chunk_str.startswith("data:"):
+                        chunk_data = chunk_str[5:].strip()
+                        if chunk_data == "[DONE]":
+                            continue
+                            
+                        # Parse the JSON data
+                        data = json.loads(chunk_data)
                         
-                        message = choice.get("message", {})
-                        tool_calls = message.get("tool_calls", [])
-                        
-                        if tool_calls:
-                            print(f"\n=== Tool Calls Found ===")
-                            print(f"Number of tool calls: {len(tool_calls)}")
+                        # Log tool call details as they stream in
+                        if data.get("choices"):
+                            choice = data["choices"][0]
+                            delta = choice.get("delta", {})
                             
-                            for i, tool_call in enumerate(tool_calls):
-                                print(f"\nTool Call {i+1}:")
-                                print(f"ID: {tool_call['id']}")
-                                print(f"Type: {tool_call['type']}")
-                                print(f"Function: {tool_call['function']['name']}")
-                                print(f"Arguments: {tool_call['function']['arguments']}")
+                            # Log tool call start
+                            if delta.get("tool_calls"):
+                                print(f"\n=== Tool Call Started ===")
+                                for tool_call in delta["tool_calls"]:
+                                    print(f"Tool Call ID: {tool_call.get('id')}")
+                                    print(f"Function: {tool_call['function'].get('name')}")
+                                    print(f"Arguments: {tool_call['function'].get('arguments')}")
                             
-                            # Process tool calls
-                            tool_messages = await process_tool_calls(tool_calls)
-                            messages.extend(tool_messages)
-                            
-                            # Update iteration state
-                            current_iteration += 1
-                            if current_iteration >= max_iterations - 1:
-                                use_tools = False
-                                print("Final iteration - disabling tools")
-                            
-                            return messages
-                        elif finish_reason == "stop":
-                            # No tool calls, just return the assistant message
-                            messages.append({
-                                "role": "assistant",
-                                "content": message.get("content", "")
-                            })
-                            return messages
-                        
+                            # Log tool call progress
+                            if delta.get("content"):
+                                print(f"Content: {delta['content']}")
+                                
+                    yield chunk
+                    
                 except json.JSONDecodeError as e:
                     print(f"\n=== JSON Decode Error ===")
                     print(f"Error: {str(e)}")
                     print(f"Chunk: {chunk}")
-                    return messages
+                    continue
                     
-            return messages
+            # Log complete tool call response
+            print(f"\n=== Complete Tool Call Response ===")
+            print(tool_response.decode('utf-8'))
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -329,18 +322,21 @@ async def chat_completion(
                     if use_tools:
                         # Store previous iteration count to detect if we made progress
                         prev_iteration = current_iteration
-                        local_messages = await handle_tool_calls(client, local_messages)
                         
+                        # Stream tool call response
+                        async for chunk in handle_tool_calls(client, local_messages):
+                            yield chunk
+                            
+                        # Update iteration state
+                        current_iteration += 1
+                        if current_iteration >= max_iterations - 1:
+                            use_tools = False
+                            print("Final iteration - disabling tools")
+                            
                         # If we didn't process any tool calls, break to avoid infinite loop
                         if current_iteration == prev_iteration:
                             print("No tool calls processed - breaking loop")
                             break
-                            
-                        if not use_tools:
-                            # Make final streaming request without tools
-                            async for chunk in make_api_request(client, local_messages, False, stream=True):
-                                yield chunk
-                            return
                     else:
                         # Make final streaming request without tools
                         async for chunk in make_api_request(client, local_messages, False, stream=True):
