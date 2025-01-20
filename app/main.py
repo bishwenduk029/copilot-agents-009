@@ -113,52 +113,6 @@ async def chat_completion(
     system_message = BASE_SYSTEM_PROMPT
     thread_id = payload.get("copilot_thread_id")
     
-    # Handle /set command separately - just ingest and ack
-    if messages and messages[-1]["role"] == "user" and messages[-1]["content"].startswith("/set"):
-        try:
-            # Extract URL from command
-            url = messages[-1]["content"].split(" ")[-1]
-            if not url.startswith("http"):
-                raise ValueError("Invalid URL format")
-            
-            # Ingest and cache the repo data
-            result = await cached_ingest(url)
-            summary = result[0]
-            tree = result[1]
-            content = result[2]
-            
-            # Store URL against thread ID
-            thread_cache.set(thread_id, {
-                "url": url,
-                "summary": summary,
-                "tree": tree,
-                "content": content
-            }, expire=3600)  # 1 hour cache
-            
-            # Create ack message and return via SSE
-            ack_message = f"Repository {url} is now ready for Q&A.\n\nRepository Summary:\n{summary}\n\nFile Tree:\n{tree}"
-            messages.append({
-                "role": "assistant",
-                "content": ack_message
-            })
-            
-            # Return streaming response with tools disabled
-            return StreamingResponse(
-                generate(),
-                media_type="application/json",
-                headers={
-                    "X-Streaming-Status": "active"
-                }
-            )
-        except Exception as e:
-            print(f"Error setting repository URL: {str(e)}")
-            return {
-                "messages": [{
-                    "role": "assistant",
-                    "content": f"Error setting repository URL: {str(e)}"
-                }],
-                "status": "error"
-            }
     
     # For non-/set commands, use cached repo context if available
     if thread_id and thread_id in thread_cache:
@@ -392,6 +346,53 @@ async def chat_completion(
             print(f"Streaming error: {str(e)}")
             yield b'{"error": "Streaming failed"}'
             return
+
+    # Handle /set command separately - just ingest and ack
+    if messages and messages[-1]["role"] == "user" and messages[-1]["content"].startswith("/set"):
+        try:
+            # Extract URL from command
+            url = messages[-1]["content"].split(" ")[-1]
+            if not url.startswith("http"):
+                raise ValueError("Invalid URL format")
+            
+            # Ingest and cache the repo data
+            result = await cached_ingest(url)
+            summary = result[0]
+            tree = result[1]
+            content = result[2]
+            
+            # Store URL against thread ID
+            thread_cache.set(thread_id, {
+                "url": url,
+                "summary": summary,
+                "tree": tree,
+                "content": content
+            }, expire=3600)  # 1 hour cache
+            
+            # Create ack message and return via SSE
+            ack_message = f"Repository {url} is now ready for Q&A.\n\nRepository Summary:\n{summary}\n\nFile Tree:\n{tree}"
+            messages.append({
+                "role": "assistant",
+                "content": ack_message
+            })
+            
+            # Return streaming response with tools disabled
+            return StreamingResponse(
+                generate(),
+                media_type="application/json",
+                headers={
+                    "X-Streaming-Status": "active"
+                }
+            )
+        except Exception as e:
+            print(f"Error setting repository URL: {str(e)}")
+            return {
+                "messages": [{
+                    "role": "assistant",
+                    "content": f"Error setting repository URL: {str(e)}"
+                }],
+                "status": "error"
+            }
 
     return StreamingResponse(
         generate(),
