@@ -276,35 +276,50 @@ async def chat_completion(
                     # Accumulate chunks for logging
                     tool_response += chunk
                     
-                    # Parse each chunk as it comes in
-                    chunk_str = chunk.decode('utf-8').strip()
-                    if chunk_str.startswith("data:"):
-                        chunk_data = chunk_str[5:].strip()
-                        if chunk_data == "[DONE]":
+                    # Accumulate raw bytes and decode as UTF-8
+                    tool_response += chunk
+                    chunk_str = chunk.decode('utf-8')
+                    
+                    # Process each line separately
+                    for line in chunk_str.splitlines():
+                        line = line.strip()
+                        if not line:
                             continue
                             
-                        # Parse the JSON data
-                        data = json.loads(chunk_data)
-                        
-                        # Check if tool calls are detected
-                        if data.get("choices"):
-                            choice = data["choices"][0]
-                            delta = choice.get("delta", {})
-                            
-                            if delta.get("tool_calls"):
-                                tool_calls_detected = True
-                                print(f"\n=== Tool Call Started ===")
-                                for tool_call in delta["tool_calls"]:
-                                    print(f"Tool Call ID: {tool_call.get('id')}")
-                                    print(f"Function: {tool_call['function'].get('name')}")
-                                    print(f"Arguments: {tool_call['function'].get('arguments')}")
-                            
-                            # Log tool call progress
-                            if delta.get("content"):
-                                print(f"Content: {delta['content']}")
+                        if line.startswith("data:"):
+                            chunk_data = line[5:].strip()
+                            if chunk_data == "[DONE]":
+                                continue
                                 
-                    # Return chunk in SSE format
-                    yield f"data: {chunk_str}\n\n".encode('utf-8')
+                            try:
+                                # Parse the JSON data
+                                data = json.loads(chunk_data)
+                                
+                                # Check if tool calls are detected
+                                if data.get("choices"):
+                                    choice = data["choices"][0]
+                                    delta = choice.get("delta", {})
+                                    
+                                    if delta.get("tool_calls"):
+                                        tool_calls_detected = True
+                                        print(f"\n=== Tool Call Started ===")
+                                        for tool_call in delta["tool_calls"]:
+                                            print(f"Tool Call ID: {tool_call.get('id')}")
+                                            print(f"Function: {tool_call['function'].get('name')}")
+                                            print(f"Arguments: {tool_call['function'].get('arguments')}")
+                                    
+                                    # Log tool call progress
+                                    if delta.get("content"):
+                                        print(f"Content: {delta['content']}")
+                                
+                            except json.JSONDecodeError as e:
+                                print(f"\n=== Partial JSON Data ===")
+                                print(f"Error: {str(e)}")
+                                print(f"Chunk Data: {chunk_data}")
+                                continue
+                                
+                        # Return each line in SSE format
+                        yield f"data: {line}\n\n".encode('utf-8')
                     
                 except json.JSONDecodeError as e:
                     print(f"\n=== JSON Decode Error ===")
