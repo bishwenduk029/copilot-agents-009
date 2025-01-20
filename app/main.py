@@ -135,8 +135,6 @@ async def chat_completion(
     # Define available tools with thread context
     tools = []
     if thread_id:
-        print(f"\n=== Auth Token ===")
-        print(f"Token present: {'YES' if x_github_token else 'NO'}")
         
         tools = [{
             "type": "function",
