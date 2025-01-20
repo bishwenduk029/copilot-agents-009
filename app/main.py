@@ -30,6 +30,7 @@ To use the tools:
 4. The tool will return matching file contents that you can use in your response
 
 Important rules:
+- Use the repository context below to see if you can answer the queries, else use the tools accordingly.
 - Always check the file tree first to confirm the file exists
 - Use the exact file path as shown in the file tree
 - Never guess file paths - if you can't find it in the tree, ask for clarification"""
