@@ -262,30 +262,38 @@ async def chat_completion(
                 yield response.content
 
         async def handle_tool_calls(client, messages):
-            """Handle tool calls and return updated messages"""
+            """
+            Handle tool calls and return updated messages.
+
+            This version handles partial/streamed JSON for function calls in multiple chunks
+            by accumulating them in memory until they are complete.
+            """
             nonlocal current_iteration, use_tools
             
             print(f"\n=== Tool Call Iteration {current_iteration + 1} ===")
-            
+
+            # A buffer to accumulate possibly partial JSON data across SSE lines
+            if not hasattr(handle_tool_calls, 'json_buffer'):
+                handle_tool_calls.json_buffer = ""
+
+            # A place to accumulate partial function calls until they're complete
+            if not hasattr(handle_tool_calls, 'partial_calls'):
+                # Structure: { tool_call_id: { "name": str, "arguments": str } }
+                handle_tool_calls.partial_calls = {}
+
             # Make streaming API request for tool calls
             tool_response = b""
             tool_calls_detected = False
             
-            # A buffer to accumulate possibly partial JSON data
-            if not hasattr(handle_tool_calls, 'json_buffer'):
-                handle_tool_calls.json_buffer = ""
-
             async for chunk in make_api_request(client, messages, use_tools, stream=True):
-                # Accumulate raw bytes
                 tool_response += chunk
                 
-                # Attempt to decode current chunk
+                # Try to decode the chunk as UTF-8 text
                 try:
                     chunk_str = chunk.decode('utf-8', errors='replace')
                 except UnicodeDecodeError:
-                    # If partial UTF-8, just buffer it and continue
-                    handle_tool_calls.json_buffer += chunk.decode('latin-1', errors='ignore')
-                    continue
+                    # If partial UTF-8, just store raw for now
+                    chunk_str = chunk.decode('latin-1', errors='ignore')
                 
                 # Process SSE lines
                 for line in chunk_str.splitlines():
@@ -293,44 +301,77 @@ async def chat_completion(
                     if not line:
                         continue
                     
+                    # SSE data lines begin with 'data:'
                     if line.startswith("data:"):
                         data_content = line[5:].strip()
                         
                         # Check if it's the end sentinel
                         if data_content == "[DONE]":
                             continue
-                        
-                        # Append data_content to buffer
+
+                        # Append this line of JSON data to the json_buffer
                         handle_tool_calls.json_buffer += data_content
 
-                        # Try to parse as JSON in a loop in case multiple JSON objs are in buffer
+                        # Try to parse as many complete JSON objects as possible
                         while True:
                             try:
                                 parsed, offset = json.JSONDecoder().raw_decode(handle_tool_calls.json_buffer)
-                                # We got a valid JSON object
+                                # Remove the parsed portion from the buffer
                                 handle_tool_calls.json_buffer = handle_tool_calls.json_buffer[offset:].lstrip()
                                 
                                 # Check if tool calls are in 'parsed'
                                 if parsed.get("choices"):
                                     choice = parsed["choices"][0]
                                     delta = choice.get("delta", {})
+                                    finish_reason = choice.get("finish_reason")
                                     
-                                    if delta.get("tool_calls"):
+                                    # If the model is sending partial function calls in delta["tool_calls"], accumulate them
+                                    if "tool_calls" in delta:
                                         tool_calls_detected = True
-                                        print(f"\n=== Tool Call Started ===")
-                                        for tool_call in delta["tool_calls"]:
-                                            print(f"Tool Call ID: {tool_call.get('id')}")
-                                            print(f"Function: {tool_call['function'].get('name')}")
-                                            print(f"Arguments: {tool_call['function'].get('arguments')}")
-                                
-                                # Send each SSE line onward
+                                        for tc in delta["tool_calls"]:
+                                            call_id = tc.get("id")
+                                            
+                                            # If there's no explicit ID, fallback to the 'index' or something stable
+                                            # so that multiple partial chunks for the same call can be merged
+                                            if call_id is None:
+                                                call_id = f"no_id_index_{tc.get('index','0')}"
+
+                                            if call_id not in handle_tool_calls.partial_calls:
+                                                handle_tool_calls.partial_calls[call_id] = {
+                                                    "name": tc["function"].get("name"),
+                                                    "arguments": ""
+                                                }
+
+                                            # Accumulate partial arguments if present
+                                            partial_args = tc["function"].get("arguments", "")
+                                            if partial_args:
+                                                handle_tool_calls.partial_calls[call_id]["arguments"] += partial_args
+                                            
+                                            # If the function name arrives in pieces, update it if available
+                                            fn_name = tc["function"].get("name")
+                                            if fn_name:
+                                                handle_tool_calls.partial_calls[call_id]["name"] = fn_name
+                                    
+                                    # If we see finish_reason == 'tool_calls', we finalize the accumulated function calls
+                                    if finish_reason == "tool_calls":
+                                        print("\n=== Tool Call Started ===")
+                                        for call_id, call_data in handle_tool_calls.partial_calls.items():
+                                            print(f"Tool Call ID: {call_id if 'no_id_index_' not in call_id else 'None'}")
+                                            print(f"Function: {call_data['name']}")
+                                            print(f"Arguments: {call_data['arguments']}")
+                                        # Here you could handle or execute them as needed
+                                        # e.g. pass them to a function that calls navigate_repository_content
+                                        
+                                        # Clear partial calls so we can detect new calls
+                                        handle_tool_calls.partial_calls.clear()
+                                    
+                                # Send each SSE chunk forward if desired
                                 yield f"data: {json.dumps(parsed)}\n\n".encode('utf-8')
 
                             except json.JSONDecodeError:
-                                # Incomplete JSON or leftover data: break and wait for more
+                                # Not enough data in the buffer to form a complete JSON object yet
                                 break
 
-            # Log complete tool call response
             print(f"\n=== Complete Tool Call Response ===")
             print(tool_response.decode('utf-8', errors='replace'))
             
