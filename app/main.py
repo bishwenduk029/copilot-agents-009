@@ -113,7 +113,7 @@ async def chat_completion(
     system_message = BASE_SYSTEM_PROMPT
     thread_id = payload.get("copilot_thread_id")
     
-    # Check if this is a /set url command
+    # Handle /set command separately - just ingest and ack
     if messages and messages[-1]["role"] == "user" and messages[-1]["content"].startswith("/set"):
         try:
             # Extract URL from command
@@ -122,22 +122,10 @@ async def chat_completion(
                 raise ValueError("Invalid URL format")
             
             # Ingest and cache the repo data
-            try:
-                # Only include code files by default
-                result = await cached_ingest(url)
-                summary = result[0]
-                tree = result[1]
-                content = result[2]
-            except Exception as e:
-                print(f"Error ingesting repository: {str(e)}")
-                messages.append({
-                    "role": "assistant",
-                    "content": f"Error ingesting repository: {str(e)}"
-                })
-                return {
-                    "messages": messages,
-                    "status": "error"
-                }
+            result = await cached_ingest(url)
+            summary = result[0]
+            tree = result[1]
+            content = result[2]
             
             # Store URL against thread ID
             thread_cache.set(thread_id, {
@@ -147,23 +135,26 @@ async def chat_completion(
                 "content": content
             }, expire=3600)  # 1 hour cache
             
-            # Create a specific acknowledgment message for the LLM
-            ack_message = f"\n\nRepository {url} is now ready for Q&A.\n{REPO_CONTEXT_PROMPT.format(summary=summary, tree=tree)}"
-            system_message += ack_message
-            
-            # Add an assistant message acknowledging the repo is ready
-            messages.append({
-                "role": "assistant",
-                "content": f"Repository {url} is now ready for Q&A.\n\nRepository Summary:\n{summary}\n\nFile Tree:\n{tree}"
-            })
+            # Return simple ack without any tool calling
+            return {
+                "messages": [{
+                    "role": "assistant",
+                    "content": f"Repository {url} is now ready for Q&A.\n\nRepository Summary:\n{summary}\n\nFile Tree:\n{tree}"
+                }],
+                "status": "success"
+            }
         except Exception as e:
             print(f"Error setting repository URL: {str(e)}")
-            messages.append({
-                "role": "assistant",
-                "content": f"Error setting repository URL: {str(e)}"
-            })
-    elif thread_id and thread_id in thread_cache:
-        # Use cached repo context for this thread
+            return {
+                "messages": [{
+                    "role": "assistant",
+                    "content": f"Error setting repository URL: {str(e)}"
+                }],
+                "status": "error"
+            }
+    
+    # For non-/set commands, use cached repo context if available
+    if thread_id and thread_id in thread_cache:
         repo_data = thread_cache[thread_id]
         system_message += f"\n\n{REPO_CONTEXT_PROMPT.format(summary=repo_data['summary'], tree=repo_data['tree'])}"
     
