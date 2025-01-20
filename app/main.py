@@ -114,24 +114,9 @@ async def chat_completion(
     thread_id = payload.get("copilot_thread_id")
     
     
-    # For non-/set commands, use cached repo context if available
+    # Add repo context if available
     if thread_id and thread_id in thread_cache:
         repo_data = thread_cache[thread_id]
-        
-        # Check if last message is asking about file structure
-        if messages and messages[-1]["role"] == "user":
-            last_msg = messages[-1]["content"].lower()
-            if any(phrase in last_msg for phrase in ["file structure", "file tree", "directory structure", "list of files"]):
-                # Directly return the file tree without tool calling
-                return {
-                    "messages": [{
-                        "role": "assistant",
-                        "content": f"Here is the file structure:\n\n{repo_data['tree']}"
-                    }],
-                    "status": "success"
-                }
-        
-        # Add repo context to system message for other queries
         system_message += f"\n\n{REPO_CONTEXT_PROMPT.format(summary=repo_data['summary'], tree=repo_data['tree'])}"
     
     messages.insert(0, {
@@ -228,7 +213,7 @@ async def chat_completion(
                 "messages": messages,
                 "stream": stream,
                 "tools": tools if use_tools else None,
-                "tool_choice": "required" if use_tools else None,
+                "tool_choice": "auto" if use_tools else None,
                 "model": "gpt-4o"
             }
             
