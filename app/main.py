@@ -205,7 +205,7 @@ async def chat_completion(
             """Make API request and handle response"""
             print(f"\n=== API Request ===")
             print(f"Using tools: {'YES' if use_tools else 'NO'}")
-            print(f"Tool choice: {'required' if use_tools else 'none'}")
+            print(f"Tool choice: {'auto' if use_tools else 'none'}")
             print(f"Streaming: {'YES' if stream else 'NO'}")
             print(f"Token: {x_github_token}")
             
