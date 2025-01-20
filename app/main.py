@@ -271,49 +271,48 @@ async def chat_completion(
             tool_response = b""
             tool_calls_detected = False
             
+            # A buffer to accumulate possibly partial JSON data
+            if not hasattr(handle_tool_calls, 'json_buffer'):
+                handle_tool_calls.json_buffer = ""
+
             async for chunk in make_api_request(client, messages, use_tools, stream=True):
+                # Accumulate raw bytes
+                tool_response += chunk
+                
+                # Attempt to decode current chunk
                 try:
-                    # Accumulate chunks for logging
-                    tool_response += chunk
-                    
-                    # Accumulate raw bytes
-                    tool_response += chunk
-                    
-                    # Decode as UTF-8, handling partial sequences
-                    try:
-                        chunk_str = chunk.decode('utf-8')
-                    except UnicodeDecodeError:
-                        # If we have a partial UTF-8 sequence, wait for next chunk
+                    chunk_str = chunk.decode('utf-8', errors='replace')
+                except UnicodeDecodeError:
+                    # If partial UTF-8, just buffer it and continue
+                    handle_tool_calls.json_buffer += chunk.decode('latin-1', errors='ignore')
+                    continue
+                
+                # Process SSE lines
+                for line in chunk_str.splitlines():
+                    line = line.strip()
+                    if not line:
                         continue
                     
-                    # Buffer for partial JSON data
-                    if not hasattr(handle_tool_calls, 'json_buffer'):
-                        handle_tool_calls.json_buffer = ""
-                    
-                    # Process each line separately
-                    for line in chunk_str.splitlines():
-                        line = line.strip()
-                        if not line:
+                    if line.startswith("data:"):
+                        data_content = line[5:].strip()
+                        
+                        # Check if it's the end sentinel
+                        if data_content == "[DONE]":
                             continue
-                            
-                        if line.startswith("data:"):
-                            chunk_data = line[5:].strip()
-                            if chunk_data == "[DONE]":
-                                continue
-                                
-                            # Add to JSON buffer
-                            handle_tool_calls.json_buffer += chunk_data
-                            
+                        
+                        # Append data_content to buffer
+                        handle_tool_calls.json_buffer += data_content
+
+                        # Try to parse as JSON in a loop in case multiple JSON objs are in buffer
+                        while True:
                             try:
-                                # Try to parse the accumulated JSON
-                                data = json.loads(handle_tool_calls.json_buffer)
+                                parsed, offset = json.JSONDecoder().raw_decode(handle_tool_calls.json_buffer)
+                                # We got a valid JSON object
+                                handle_tool_calls.json_buffer = handle_tool_calls.json_buffer[offset:].lstrip()
                                 
-                                # Clear buffer on successful parse
-                                handle_tool_calls.json_buffer = ""
-                                
-                                # Check if tool calls are detected
-                                if data.get("choices"):
-                                    choice = data["choices"][0]
+                                # Check if tool calls are in 'parsed'
+                                if parsed.get("choices"):
+                                    choice = parsed["choices"][0]
                                     delta = choice.get("delta", {})
                                     
                                     if delta.get("tool_calls"):
@@ -323,33 +322,17 @@ async def chat_completion(
                                             print(f"Tool Call ID: {tool_call.get('id')}")
                                             print(f"Function: {tool_call['function'].get('name')}")
                                             print(f"Arguments: {tool_call['function'].get('arguments')}")
-                                    
-                                    # Log tool call progress
-                                    if delta.get("content"):
-                                        print(f"Content: {delta['content']}")
                                 
-                            except json.JSONDecodeError as e:
-                                # If we have a partial JSON, keep it in buffer
-                                if not isinstance(e, json.JSONDecodeError) or e.pos != len(handle_tool_calls.json_buffer):
-                                    # Only log errors that aren't just partial data
-                                    print(f"\n=== JSON Parse Error ===")
-                                    print(f"Error: {str(e)}")
-                                    print(f"Partial Data: {handle_tool_calls.json_buffer}")
-                                continue
-                                
-                        # Return each line in SSE format
-                        yield f"data: {line}\n\n".encode('utf-8')
-                    
-                except json.JSONDecodeError as e:
-                    print(f"\n=== JSON Decode Error ===")
-                    print(f"Error: {str(e)}")
-                    print(f"Chunk: {chunk}")
-                    yield f"data: {json.dumps({'error': str(e)})}\n\n".encode('utf-8')
-                    continue
-                    
+                                # Send each SSE line onward
+                                yield f"data: {json.dumps(parsed)}\n\n".encode('utf-8')
+
+                            except json.JSONDecodeError:
+                                # Incomplete JSON or leftover data: break and wait for more
+                                break
+
             # Log complete tool call response
             print(f"\n=== Complete Tool Call Response ===")
-            print(tool_response.decode('utf-8'))
+            print(tool_response.decode('utf-8', errors='replace'))
             
             # If no tool calls were detected, mark tools as disabled
             if not tool_calls_detected:
