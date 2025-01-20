@@ -202,7 +202,7 @@ async def chat_completion(
         # Create local copy of messages to avoid scope issues
         local_messages = messages.copy()
         
-        async def make_api_request(client, messages, use_tools, stream=False):
+        async def make_api_request(client, messages, use_tools, stream=True):
             """Make API request and handle response"""
             print(f"\n=== API Request ===")
             print(f"Using tools: {'YES' if use_tools else 'NO'}")
