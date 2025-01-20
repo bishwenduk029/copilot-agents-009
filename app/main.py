@@ -135,14 +135,21 @@ async def chat_completion(
                 "content": content
             }, expire=3600)  # 1 hour cache
             
-            # Return simple ack without any tool calling
-            return {
-                "messages": [{
-                    "role": "assistant",
-                    "content": f"Repository {url} is now ready for Q&A.\n\nRepository Summary:\n{summary}\n\nFile Tree:\n{tree}"
-                }],
-                "status": "success"
-            }
+            # Create ack message and return via SSE
+            ack_message = f"Repository {url} is now ready for Q&A.\n\nRepository Summary:\n{summary}\n\nFile Tree:\n{tree}"
+            messages.append({
+                "role": "assistant",
+                "content": ack_message
+            })
+            
+            # Return streaming response with tools disabled
+            return StreamingResponse(
+                generate(),
+                media_type="application/json",
+                headers={
+                    "X-Streaming-Status": "active"
+                }
+            )
         except Exception as e:
             print(f"Error setting repository URL: {str(e)}")
             return {
@@ -228,7 +235,12 @@ async def chat_completion(
     async def generate():
         max_iterations = 3
         current_iteration = 0
-        use_tools = bool(tools)
+        # Disable tools for /set command responses
+        use_tools = bool(tools) and not any(
+            msg["content"].startswith("/set") 
+            for msg in messages 
+            if msg["role"] == "user"
+        )
         # Create local copy of messages to avoid scope issues
         local_messages = messages.copy()
         
